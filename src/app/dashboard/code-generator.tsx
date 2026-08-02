@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createCustomer,
   generateCode,
@@ -51,15 +51,17 @@ export function CodeGeneratorPanel() {
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
 
   const secondsLeft = useCountdown(generated?.expires_at ?? null);
+  const searchRequestId = useRef(0);
 
-  async function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
+  async function runSearch() {
     setError(null);
     setSelected(null);
     setGenerated(null);
     setShowCreateForm(false);
     setSearching(true);
+    const requestId = ++searchRequestId.current;
     const result = await searchCustomers({ fullName, dob, mobileNumber });
+    if (requestId !== searchRequestId.current) return; // superseded by a newer search
     if (result.ok) {
       setResults(result.data);
       setSearched(true);
@@ -68,6 +70,33 @@ export function CodeGeneratorPanel() {
     }
     setSearching(false);
   }
+
+  function handleSearchSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    runSearch();
+  }
+
+  // Live search as you type: fires ~300ms after typing pauses, so
+  // finding a customer among potentially thousands never requires
+  // loading the full list into the browser -- each keystroke pause
+  // just re-queries the (already company-scoped, limited) search.
+  useEffect(() => {
+    const hasEnoughInput =
+      fullName.trim().length >= 2 || mobileNumber.trim().length >= 2 || !!dob;
+
+    if (!hasEnoughInput) {
+      searchRequestId.current++; // invalidate any in-flight search
+      setResults([]);
+      setSearched(false);
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      runSearch();
+    }, 300);
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fullName, dob, mobileNumber]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -98,8 +127,12 @@ export function CodeGeneratorPanel() {
 
   return (
     <div className="space-y-4">
-      <form onSubmit={handleSearch} className="space-y-3">
+      <form onSubmit={handleSearchSubmit} className="space-y-3">
         <p className="text-sm font-medium text-gray-700">Find a customer</p>
+        <p className="text-xs text-gray-500">
+          Results appear as you type (name or mobile, 2+ characters, or pick a
+          DOB).
+        </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <input
             type="text"

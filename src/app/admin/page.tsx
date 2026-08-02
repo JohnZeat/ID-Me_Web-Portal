@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { CsvUploadPanel } from "./csv-upload-panel";
@@ -45,9 +46,17 @@ export default async function AdminPage() {
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10">
       <div className="mx-auto max-w-2xl">
-        <h1 className="mb-8 text-xl font-semibold text-gray-900">
-          Admin Area
-        </h1>
+        <div className="mb-8 flex items-center justify-between">
+          <h1 className="text-xl font-semibold text-gray-900">
+            Admin Area
+          </h1>
+          <Link
+            href="/dashboard"
+            className="text-sm font-medium text-gray-500 hover:text-gray-900"
+          >
+            Back to Dashboard
+          </Link>
+        </div>
         <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
           {!staff ? (
             <p className="text-sm text-amber-800">
