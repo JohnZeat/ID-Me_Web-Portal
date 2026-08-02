@@ -18,9 +18,6 @@ export default async function AdminPage() {
     .eq("id", user.id)
     .maybeSingle();
 
-  // TODO(build sequencing step 3): gate this on staff.role === "admin"
-  // once staff invites/roles have UI, not just "has a staff row."
-
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10">
       <div className="mx-auto max-w-2xl">
@@ -32,6 +29,10 @@ export default async function AdminPage() {
             <p className="text-sm text-amber-800">
               Your account isn&apos;t provisioned for any company yet.
               Contact your admin to be added as staff.
+            </p>
+          ) : staff.role !== "admin" ? (
+            <p className="text-sm text-amber-800">
+              This area is restricted to company admins.
             </p>
           ) : (
             <div className="space-y-8">

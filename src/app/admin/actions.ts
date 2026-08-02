@@ -71,10 +71,11 @@ export async function uploadCustomersCsv(
 
   const { data: staff } = await supabase
     .from("staff")
-    .select("company_id")
+    .select("company_id, role")
     .eq("id", user.id)
     .maybeSingle();
   if (!staff) throw new Error("Your account isn't provisioned for a company");
+  if (staff.role !== "admin") throw new Error("Admin role required");
 
   const rows = parseCsv(await file.text());
   if (rows.length === 0) {

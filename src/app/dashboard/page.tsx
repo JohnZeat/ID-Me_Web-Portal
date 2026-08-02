@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "./sign-out-button";
@@ -26,7 +27,17 @@ export default async function DashboardPage() {
           <h1 className="text-xl font-semibold text-gray-900">
             Staff Dashboard
           </h1>
-          <SignOutButton />
+          <div className="flex items-center gap-4">
+            {staff?.role === "admin" && (
+              <Link
+                href="/admin"
+                className="text-sm font-medium text-gray-500 hover:text-gray-900"
+              >
+                Admin
+              </Link>
+            )}
+            <SignOutButton />
+          </div>
         </div>
 
         <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
