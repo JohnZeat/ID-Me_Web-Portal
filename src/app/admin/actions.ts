@@ -1,6 +1,8 @@
 "use server";
 
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 
 export type SkipReason = { row: number; reason: string };
 
@@ -63,19 +65,8 @@ export async function uploadCustomersCsv(
     throw new Error("No file provided");
   }
 
+  const staff = await requireAdmin();
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not signed in");
-
-  const { data: staff } = await supabase
-    .from("staff")
-    .select("company_id, role")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (!staff) throw new Error("Your account isn't provisioned for a company");
-  if (staff.role !== "admin") throw new Error("Admin role required");
 
   const rows = parseCsv(await file.text());
   if (rows.length === 0) {
@@ -157,4 +148,96 @@ export async function uploadCustomersCsv(
   }
 
   return { upserted: count ?? validRows.length, skipped };
+}
+
+export type StaffListEntry = { id: string; email: string; role: string };
+
+// Checks the caller is an authenticated company admin, throwing if not.
+// Returns their staff row so callers don't need a second lookup.
+async function requireAdmin() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not signed in");
+
+  const { data: staff } = await supabase
+    .from("staff")
+    .select("company_id, role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (!staff) throw new Error("Your account isn't provisioned for a company");
+  if (staff.role !== "admin") throw new Error("Admin role required");
+
+  return staff;
+}
+
+export async function listStaff(): Promise<StaffListEntry[]> {
+  const staff = await requireAdmin();
+
+  // staff has no select policy for viewing teammates (only "own row"),
+  // and auth.users (for email) isn't reachable via the regular client
+  // at all -- both require the service role, gated by the admin check
+  // above rather than by RLS.
+  const serviceClient = createServiceClient();
+  const { data: companyStaff, error } = await serviceClient
+    .from("staff")
+    .select("id, role")
+    .eq("company_id", staff.company_id);
+
+  if (error) throw new Error(error.message);
+
+  return Promise.all(
+    (companyStaff ?? []).map(async (row) => {
+      const { data } = await serviceClient.auth.admin.getUserById(row.id);
+      return { id: row.id, email: data.user?.email ?? "(unknown)", role: row.role };
+    })
+  );
+}
+
+export async function inviteStaff(input: {
+  email: string;
+  role: "staff" | "admin";
+}): Promise<{ email: string }> {
+  const staff = await requireAdmin();
+
+  const email = input.email.trim().toLowerCase();
+  const domain = email.split("@")[1];
+  if (!domain) throw new Error("Invalid email address");
+
+  const supabase = await createClient();
+  const { data: domainMatch } = await supabase
+    .from("company_domains")
+    .select("id")
+    .eq("company_id", staff.company_id)
+    .eq("domain", domain)
+    .maybeSingle();
+
+  if (!domainMatch) {
+    throw new Error(
+      `${domain} isn't a registered domain for your company. Add it before inviting this address.`
+    );
+  }
+
+  const headersList = await headers();
+  const host = headersList.get("host");
+  const protocol = host?.startsWith("localhost") ? "http" : "https";
+  const redirectTo = `${protocol}://${host}/invite/accept`;
+
+  const serviceClient = createServiceClient();
+  const { data: invited, error } = await serviceClient.auth.admin.inviteUserByEmail(
+    email,
+    { redirectTo }
+  );
+  if (error) throw new Error(error.message);
+  if (!invited.user) throw new Error("Invite failed");
+
+  const { error: staffError } = await serviceClient.from("staff").insert({
+    id: invited.user.id,
+    company_id: staff.company_id,
+    role: input.role,
+  });
+  if (staffError) throw new Error(staffError.message);
+
+  return { email };
 }
