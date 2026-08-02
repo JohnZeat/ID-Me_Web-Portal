@@ -40,12 +40,12 @@ export function InviteStaffPanel() {
           placeholder="name@company.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
+          className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-gray-900 focus:outline-none"
         />
         <select
           value={role}
           onChange={(e) => setRole(e.target.value as "staff" | "admin")}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
+          className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-gray-900 focus:outline-none"
         >
           <option value="staff">Staff</option>
           <option value="admin">Admin</option>

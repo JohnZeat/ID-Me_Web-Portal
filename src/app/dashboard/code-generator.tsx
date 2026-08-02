@@ -108,21 +108,21 @@ export function CodeGeneratorPanel() {
             placeholder="Full name"
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-gray-900 focus:outline-none"
           />
           <input
             type="date"
             placeholder="DOB"
             value={dob}
             onChange={(e) => setDob(e.target.value)}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-gray-900 focus:outline-none"
           />
           <input
             type="tel"
             placeholder="Mobile (+61...)"
             value={mobileNumber}
             onChange={(e) => setMobileNumber(e.target.value)}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
+            className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-gray-900 focus:outline-none"
           />
         </div>
         <button
@@ -189,14 +189,14 @@ export function CodeGeneratorPanel() {
               placeholder="Full name"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-gray-900 focus:outline-none"
             />
             <input
               type="date"
               required
               value={dob}
               onChange={(e) => setDob(e.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-gray-900 focus:outline-none"
             />
             <input
               type="tel"
@@ -204,7 +204,7 @@ export function CodeGeneratorPanel() {
               placeholder="+61412345678"
               value={mobileNumber}
               onChange={(e) => setMobileNumber(e.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:outline-none"
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-gray-900 focus:outline-none"
             />
           </div>
           <button

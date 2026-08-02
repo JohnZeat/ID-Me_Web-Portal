@@ -42,7 +42,7 @@ export function CsvUploadPanel() {
           type="file"
           accept=".csv"
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="text-sm"
+          className="text-sm text-gray-700"
         />
         <button
           type="submit"
