@@ -270,3 +270,140 @@ export async function inviteStaff(input: {
     return err(e);
   }
 }
+
+export type CompanySettings = {
+  name: string;
+  codeExpirySeconds: number;
+};
+
+// companies has RLS enabled with no policies for the regular client
+// (locked down entirely, same reasoning as staff/auth.users in
+// listStaff) -- these use the service role, gated by requireAdmin().
+export async function getCompanySettings(): Promise<ActionResult<CompanySettings>> {
+  try {
+    const staff = await requireAdmin();
+    const serviceClient = createServiceClient();
+    const { data, error } = await serviceClient
+      .from("companies")
+      .select("name, code_expiry_seconds")
+      .eq("id", staff.company_id)
+      .single();
+
+    if (error) throw new AppError("DB_ERROR", error.message);
+    return ok({ name: data.name, codeExpirySeconds: data.code_expiry_seconds });
+  } catch (e) {
+    return err(e);
+  }
+}
+
+export async function updateCompanySettings(input: {
+  name: string;
+  codeExpirySeconds: number;
+}): Promise<ActionResult<CompanySettings>> {
+  try {
+    const staff = await requireAdmin();
+
+    const name = input.name.trim();
+    if (!name) throw new AppError("INVALID_COMPANY_NAME", "Company name can't be empty");
+
+    const codeExpirySeconds = Math.trunc(input.codeExpirySeconds);
+    if (
+      !Number.isFinite(codeExpirySeconds) ||
+      codeExpirySeconds <= 0 ||
+      codeExpirySeconds > 3600
+    ) {
+      throw new AppError(
+        "INVALID_CODE_EXPIRY",
+        "Code expiry must be between 1 and 3600 seconds"
+      );
+    }
+
+    const serviceClient = createServiceClient();
+    const { data, error } = await serviceClient
+      .from("companies")
+      .update({ name, code_expiry_seconds: codeExpirySeconds })
+      .eq("id", staff.company_id)
+      .select("name, code_expiry_seconds")
+      .single();
+
+    if (error) throw new AppError("DB_ERROR", error.message);
+    return ok({ name: data.name, codeExpirySeconds: data.code_expiry_seconds });
+  } catch (e) {
+    return err(e);
+  }
+}
+
+export type CompanyDomainEntry = { id: string; domain: string };
+
+const DOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+
+// company_domains already has admin-scoped RLS policies (from the earlier
+// staff-invite work), so these use the regular client directly.
+export async function listCompanyDomains(): Promise<ActionResult<CompanyDomainEntry[]>> {
+  try {
+    const staff = await requireAdmin();
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("company_domains")
+      .select("id, domain")
+      .eq("company_id", staff.company_id)
+      .order("domain");
+
+    if (error) throw new AppError("DB_ERROR", error.message);
+    return ok(data ?? []);
+  } catch (e) {
+    return err(e);
+  }
+}
+
+export async function addCompanyDomain(
+  domainInput: string
+): Promise<ActionResult<CompanyDomainEntry>> {
+  try {
+    const staff = await requireAdmin();
+    const domain = domainInput.trim().toLowerCase();
+    if (!DOMAIN_REGEX.test(domain)) {
+      throw new AppError(
+        "INVALID_DOMAIN",
+        "That doesn't look like a valid domain (e.g. company.com)"
+      );
+    }
+
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("company_domains")
+      .insert({ company_id: staff.company_id, domain })
+      .select("id, domain")
+      .single();
+
+    if (error) {
+      if (error.message.toLowerCase().includes("duplicate") || error.code === "23505") {
+        throw new AppError(
+          "DOMAIN_ALREADY_REGISTERED",
+          "That domain is already registered, to your company or another one"
+        );
+      }
+      throw new AppError("DB_ERROR", error.message);
+    }
+    return ok(data);
+  } catch (e) {
+    return err(e);
+  }
+}
+
+export async function removeCompanyDomain(domainId: string): Promise<ActionResult<null>> {
+  try {
+    const staff = await requireAdmin();
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("company_domains")
+      .delete()
+      .eq("id", domainId)
+      .eq("company_id", staff.company_id);
+
+    if (error) throw new AppError("DB_ERROR", error.message);
+    return ok(null);
+  } catch (e) {
+    return err(e);
+  }
+}

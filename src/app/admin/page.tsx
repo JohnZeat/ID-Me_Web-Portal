@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { CsvUploadPanel } from "./csv-upload-panel";
 import { InviteStaffPanel } from "./invite-staff-panel";
-import { listStaff } from "./actions";
+import { CompanySettingsPanel } from "./company-settings-panel";
+import { listStaff, getCompanySettings, listCompanyDomains } from "./actions";
 import { getErrorGuidanceForStaff } from "@/lib/error-guidance";
 
 export default async function AdminPage() {
@@ -28,6 +29,18 @@ export default async function AdminPage() {
     staffListResult && !staffListResult.ok
       ? await getErrorGuidanceForStaff(staffListResult.code)
       : null;
+
+  const settingsResult = isAdmin ? await getCompanySettings() : null;
+  const domainsResult = isAdmin ? await listCompanyDomains() : null;
+  const settingsFailure =
+    settingsResult && !settingsResult.ok
+      ? settingsResult
+      : domainsResult && !domainsResult.ok
+        ? domainsResult
+        : null;
+  const settingsGuidance = settingsFailure
+    ? await getErrorGuidanceForStaff(settingsFailure.code)
+    : null;
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10">
@@ -81,9 +94,36 @@ export default async function AdminPage() {
 
               <CsvUploadPanel />
 
+              <div>
+                <p className="mb-3 text-sm font-medium text-gray-700">
+                  Company settings
+                </p>
+                {settingsFailure ? (
+                  settingsGuidance ? (
+                    <div
+                      className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700"
+                      dangerouslySetInnerHTML={{ __html: settingsGuidance.html }}
+                    />
+                  ) : (
+                    <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                      {settingsFailure.message}
+                    </p>
+                  )
+                ) : (
+                  settingsResult?.ok &&
+                  domainsResult?.ok && (
+                    <CompanySettingsPanel
+                      initialName={settingsResult.data.name}
+                      initialCodeExpirySeconds={settingsResult.data.codeExpirySeconds}
+                      initialDomains={domainsResult.data}
+                    />
+                  )
+                )}
+              </div>
+
               <p className="text-sm text-gray-600">
-                API key management, company settings, and the audit log land
-                here — build sequencing step 3 in the solution design.
+                API key management and the audit log land here — build
+                sequencing step 3 in the solution design.
               </p>
             </div>
           )}
