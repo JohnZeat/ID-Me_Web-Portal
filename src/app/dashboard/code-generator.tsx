@@ -58,44 +58,41 @@ export function CodeGeneratorPanel() {
     setGenerated(null);
     setShowCreateForm(false);
     setSearching(true);
-    try {
-      const data = await searchCustomers({ fullName, dob, mobileNumber });
-      setResults(data);
+    const result = await searchCustomers({ fullName, dob, mobileNumber });
+    if (result.ok) {
+      setResults(result.data);
       setSearched(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Search failed");
-    } finally {
-      setSearching(false);
+    } else {
+      setError(result.error);
     }
+    setSearching(false);
   }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setCreating(true);
-    try {
-      const customer = await createCustomer({ fullName, dob, mobileNumber });
-      setSelected(customer);
+    const result = await createCustomer({ fullName, dob, mobileNumber });
+    if (result.ok) {
+      setSelected(result.data);
       setShowCreateForm(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create customer");
-    } finally {
-      setCreating(false);
+    } else {
+      setError(result.error);
     }
+    setCreating(false);
   }
 
   async function handleGenerate() {
     if (!selected) return;
     setError(null);
     setGenerating(true);
-    try {
-      const code = await generateCode(selected.id);
-      setGenerated(code);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not generate code");
-    } finally {
-      setGenerating(false);
+    const result = await generateCode(selected.id);
+    if (result.ok) {
+      setGenerated(result.data);
+    } else {
+      setError(result.error);
     }
+    setGenerating(false);
   }
 
   return (

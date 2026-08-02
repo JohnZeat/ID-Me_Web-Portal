@@ -15,16 +15,15 @@ export function CsvUploadPanel() {
     setError(null);
     setResult(null);
     setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await uploadCustomersCsv(formData);
-      setResult(res);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
-    } finally {
-      setUploading(false);
+    const formData = new FormData();
+    formData.append("file", file);
+    const result = await uploadCustomersCsv(formData);
+    if (result.ok) {
+      setResult(result.data);
+    } else {
+      setError(result.error);
     }
+    setUploading(false);
   }
 
   return (

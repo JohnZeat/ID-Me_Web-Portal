@@ -21,7 +21,8 @@ export default async function AdminPage() {
     .maybeSingle();
 
   const isAdmin = !!staff && staff.role === "admin";
-  const staffList = isAdmin ? await listStaff() : [];
+  const staffListResult = isAdmin ? await listStaff() : null;
+  const staffList = staffListResult?.ok ? staffListResult.data : [];
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10">
@@ -45,17 +46,23 @@ export default async function AdminPage() {
                 <p className="mb-3 text-sm font-medium text-gray-700">
                   Current staff
                 </p>
-                <ul className="divide-y divide-gray-200 rounded-md border border-gray-200">
-                  {staffList.map((s) => (
-                    <li
-                      key={s.id}
-                      className="flex items-center justify-between px-4 py-2 text-sm"
-                    >
-                      <span className="text-gray-900">{s.email}</span>
-                      <span className="text-gray-500">{s.role}</span>
-                    </li>
-                  ))}
-                </ul>
+                {staffListResult && !staffListResult.ok ? (
+                  <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {staffListResult.error}
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-gray-200 rounded-md border border-gray-200">
+                    {staffList.map((s) => (
+                      <li
+                        key={s.id}
+                        className="flex items-center justify-between px-4 py-2 text-sm"
+                      >
+                        <span className="text-gray-900">{s.email}</span>
+                        <span className="text-gray-500">{s.role}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
               <InviteStaffPanel />

@@ -17,17 +17,16 @@ export function InviteStaffPanel() {
     setError(null);
     setSuccess(null);
     setSubmitting(true);
-    try {
-      const result = await inviteStaff({ email, role });
-      setSuccess(`Invite sent to ${result.email}`);
+    const result = await inviteStaff({ email, role });
+    if (result.ok) {
+      setSuccess(`Invite sent to ${result.data.email}`);
       setEmail("");
       setRole("staff");
       router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not send invite");
-    } finally {
-      setSubmitting(false);
+    } else {
+      setError(result.error);
     }
+    setSubmitting(false);
   }
 
   return (
