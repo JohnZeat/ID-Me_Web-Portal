@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { getErrorGuidanceGlobal } from "@/lib/error-guidance";
+import { getErrorGuidanceGlobal, GLOBAL_COMPANY_ID } from "@/lib/error-guidance";
 
 type VerifyRequestBody = {
   code?: unknown;
@@ -81,17 +81,16 @@ export async function POST(request: Request) {
       .limit(1)
       .maybeSingle();
 
-    let expirySeconds: number | undefined;
-    if (matchedCustomer) {
-      const { data: company } = await supabase
-        .from("companies")
-        .select("code_expiry_seconds")
-        .eq("id", matchedCustomer.company_id)
-        .maybeSingle();
-      expirySeconds = company?.code_expiry_seconds;
-    }
+    // Fall back to the Global company's default when the mobile number
+    // matches no customer at all -- otherwise the {{expiry}} placeholder
+    // would have no value to substitute and leak through unrendered.
+    const { data: company } = await supabase
+      .from("companies")
+      .select("code_expiry_seconds")
+      .eq("id", matchedCustomer?.company_id ?? GLOBAL_COMPANY_ID)
+      .maybeSingle();
 
-    return failure("NO_MATCH", 200, expirySeconds);
+    return failure("NO_MATCH", 200, company?.code_expiry_seconds);
   }
 
   await supabase
