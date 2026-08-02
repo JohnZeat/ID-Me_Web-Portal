@@ -30,7 +30,7 @@ src/
     client.ts            browser Supabase client
     server.ts             server Supabase client (Server Components/Actions)
     middleware.ts        session refresh + route protection
-  middleware.ts          wires middleware.ts into Next's request pipeline
+  proxy.ts                wires lib/supabase/middleware.ts into Next's request pipeline
 ```
 
 ## Build sequencing (from the solution design)
