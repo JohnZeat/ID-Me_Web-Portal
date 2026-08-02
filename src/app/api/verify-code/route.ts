@@ -7,13 +7,31 @@ type VerifyRequestBody = {
   mobileNumber?: unknown;
 };
 
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds} second${seconds === 1 ? "" : "s"}`;
+  const minutes = Math.round(seconds / 60);
+  return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+}
+
 // No staff session exists at this endpoint, so failures can only resolve
 // Global guidance -- there's no company to scope to until a code actually
 // matches (and even then, revealing which company almost matched would
 // leak information, so failures stay Global-only by design).
-async function failure(code: string, status: number) {
+//
+// Exception: NO_MATCH's guidance_html carries a {{expiry}} placeholder,
+// substituted here with the actual matched customer's company's
+// configured expiry when expirySeconds is provided.
+async function failure(code: string, status: number, expirySeconds?: number) {
   const guidance = await getErrorGuidanceGlobal(code);
-  return NextResponse.json({ valid: false, code, guidance }, { status });
+  const html =
+    guidance && expirySeconds !== undefined
+      ? guidance.html.replaceAll("{{expiry}}", formatDuration(expirySeconds))
+      : guidance?.html;
+
+  return NextResponse.json(
+    { valid: false, code, guidance: guidance ? { ...guidance, html } : null },
+    { status }
+  );
 }
 
 /**
@@ -53,7 +71,27 @@ export async function POST(request: Request) {
     | undefined;
 
   if (!codeRow || !customer || customer.mobile_number !== mobileNumber) {
-    return failure("NO_MATCH", 200);
+    // Best-effort: look up the expiry for whichever company this mobile
+    // number actually belongs to, purely to make the message accurate --
+    // doesn't affect whether verification succeeds either way.
+    const { data: matchedCustomer } = await supabase
+      .from("customers")
+      .select("company_id")
+      .eq("mobile_number", mobileNumber)
+      .limit(1)
+      .maybeSingle();
+
+    let expirySeconds: number | undefined;
+    if (matchedCustomer) {
+      const { data: company } = await supabase
+        .from("companies")
+        .select("code_expiry_seconds")
+        .eq("id", matchedCustomer.company_id)
+        .maybeSingle();
+      expirySeconds = company?.code_expiry_seconds;
+    }
+
+    return failure("NO_MATCH", 200, expirySeconds);
   }
 
   await supabase
