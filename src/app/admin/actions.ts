@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { ok, err, type ActionResult } from "@/lib/action-result";
+import { ok, err, AppError, type ActionResult } from "@/lib/action-result";
 
 export type SkipReason = { row: number; reason: string };
 
@@ -68,15 +68,17 @@ async function requireAdmin() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not signed in");
+  if (!user) throw new AppError("NOT_SIGNED_IN", "Not signed in");
 
   const { data: staff } = await supabase
     .from("staff")
     .select("company_id, role")
     .eq("id", user.id)
     .maybeSingle();
-  if (!staff) throw new Error("Your account isn't provisioned for a company");
-  if (staff.role !== "admin") throw new Error("Admin role required");
+  if (!staff) {
+    throw new AppError("NOT_PROVISIONED", "Your account isn't provisioned for a company");
+  }
+  if (staff.role !== "admin") throw new AppError("ADMIN_REQUIRED", "Admin role required");
 
   return staff;
 }
@@ -87,7 +89,7 @@ export async function uploadCustomersCsv(
   try {
     const file = formData.get("file");
     if (!(file instanceof File)) {
-      throw new Error("No file provided");
+      throw new AppError("NO_FILE", "No file provided");
     }
 
     const staff = await requireAdmin();
@@ -105,7 +107,10 @@ export async function uploadCustomersCsv(
     const metadataIdx = header.indexOf("metadata");
 
     if (nameIdx === -1 || dobIdx === -1 || mobileIdx === -1) {
-      throw new Error("CSV must have full_name, dob, and mobile_number columns");
+      throw new AppError(
+        "CSV_INVALID_HEADERS",
+        "CSV must have full_name, dob, and mobile_number columns"
+      );
     }
 
     const skipped: SkipReason[] = [];
@@ -169,7 +174,7 @@ export async function uploadCustomersCsv(
       .upsert(validRows, { onConflict: "company_id,full_name,dob", count: "exact" });
 
     if (error) {
-      throw new Error(error.message);
+      throw new AppError("DB_ERROR", error.message);
     }
 
     return ok({ upserted: count ?? validRows.length, skipped });
@@ -194,7 +199,7 @@ export async function listStaff(): Promise<ActionResult<StaffListEntry[]>> {
       .select("id, role")
       .eq("company_id", staff.company_id);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new AppError("DB_ERROR", error.message);
 
     const list = await Promise.all(
       (companyStaff ?? []).map(async (row) => {
@@ -218,7 +223,7 @@ export async function inviteStaff(input: {
 
     const email = input.email.trim().toLowerCase();
     const domain = email.split("@")[1];
-    if (!domain) throw new Error("Invalid email address");
+    if (!domain) throw new AppError("INVALID_EMAIL", "Invalid email address");
 
     const supabase = await createClient();
     const { data: domainMatch } = await supabase
@@ -229,7 +234,8 @@ export async function inviteStaff(input: {
       .maybeSingle();
 
     if (!domainMatch) {
-      throw new Error(
+      throw new AppError(
+        "DOMAIN_NOT_REGISTERED",
         `${domain} isn't a registered domain for your company. Add it before inviting this address.`
       );
     }
@@ -244,15 +250,20 @@ export async function inviteStaff(input: {
       email,
       { redirectTo }
     );
-    if (error) throw new Error(error.message);
-    if (!invited.user) throw new Error("Invite failed");
+    if (error) {
+      if (error.message.toLowerCase().includes("already")) {
+        throw new AppError("USER_ALREADY_EXISTS", error.message);
+      }
+      throw new AppError("DB_ERROR", error.message);
+    }
+    if (!invited.user) throw new AppError("INVITE_FAILED", "Invite failed");
 
     const { error: staffError } = await serviceClient.from("staff").insert({
       id: invited.user.id,
       company_id: staff.company_id,
       role: input.role,
     });
-    if (staffError) throw new Error(staffError.message);
+    if (staffError) throw new AppError("DB_ERROR", staffError.message);
 
     return ok({ email });
   } catch (e) {

@@ -3,13 +3,14 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { inviteStaff } from "./actions";
+import { ErrorGuidance } from "@/components/error-guidance";
 
 export function InviteStaffPanel() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"staff" | "admin">("staff");
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -24,7 +25,7 @@ export function InviteStaffPanel() {
       setRole("staff");
       router.refresh();
     } else {
-      setError(result.error);
+      setError({ code: result.code, message: result.message });
     }
     setSubmitting(false);
   }
@@ -57,11 +58,7 @@ export function InviteStaffPanel() {
           {submitting ? "Sending..." : "Send invite"}
         </button>
       </div>
-      {error && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
+      {error && <ErrorGuidance code={error.code} fallback={error.message} />}
       {success && (
         <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
           {success}

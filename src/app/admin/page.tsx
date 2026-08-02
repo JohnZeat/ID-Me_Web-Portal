@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { CsvUploadPanel } from "./csv-upload-panel";
 import { InviteStaffPanel } from "./invite-staff-panel";
 import { listStaff } from "./actions";
+import { getErrorGuidanceForStaff } from "@/lib/error-guidance";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -23,6 +24,10 @@ export default async function AdminPage() {
   const isAdmin = !!staff && staff.role === "admin";
   const staffListResult = isAdmin ? await listStaff() : null;
   const staffList = staffListResult?.ok ? staffListResult.data : [];
+  const staffListGuidance =
+    staffListResult && !staffListResult.ok
+      ? await getErrorGuidanceForStaff(staffListResult.code)
+      : null;
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10">
@@ -47,9 +52,16 @@ export default async function AdminPage() {
                   Current staff
                 </p>
                 {staffListResult && !staffListResult.ok ? (
-                  <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-                    {staffListResult.error}
-                  </p>
+                  staffListGuidance ? (
+                    <div
+                      className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700"
+                      dangerouslySetInnerHTML={{ __html: staffListGuidance.html }}
+                    />
+                  ) : (
+                    <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                      {staffListResult.message}
+                    </p>
+                  )
                 ) : (
                   <ul className="divide-y divide-gray-200 rounded-md border border-gray-200">
                     {staffList.map((s) => (

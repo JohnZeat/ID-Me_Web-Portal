@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { uploadCustomersCsv, type CsvUploadResult } from "./actions";
+import { ErrorGuidance } from "@/components/error-guidance";
 
 export function CsvUploadPanel() {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<CsvUploadResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ code: string; message: string } | null>(null);
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
@@ -21,7 +22,7 @@ export function CsvUploadPanel() {
     if (result.ok) {
       setResult(result.data);
     } else {
-      setError(result.error);
+      setError({ code: result.code, message: result.message });
     }
     setUploading(false);
   }
@@ -52,11 +53,7 @@ export function CsvUploadPanel() {
         </button>
       </form>
 
-      {error && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
+      {error && <ErrorGuidance code={error.code} fallback={error.message} />}
 
       {result && (
         <div className="rounded-md border border-gray-200 bg-white p-4 text-sm">

@@ -8,6 +8,7 @@ import {
   type CustomerSearchResult,
   type GeneratedCode,
 } from "./actions";
+import { ErrorGuidance } from "@/components/error-guidance";
 
 function useCountdown(expiresAt: string | null) {
   const [secondsLeft, setSecondsLeft] = useState(0);
@@ -47,7 +48,7 @@ export function CodeGeneratorPanel() {
   const [generated, setGenerated] = useState<GeneratedCode | null>(null);
   const [generating, setGenerating] = useState(false);
 
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ code: string; message: string } | null>(null);
 
   const secondsLeft = useCountdown(generated?.expires_at ?? null);
 
@@ -63,7 +64,7 @@ export function CodeGeneratorPanel() {
       setResults(result.data);
       setSearched(true);
     } else {
-      setError(result.error);
+      setError({ code: result.code, message: result.message });
     }
     setSearching(false);
   }
@@ -77,7 +78,7 @@ export function CodeGeneratorPanel() {
       setSelected(result.data);
       setShowCreateForm(false);
     } else {
-      setError(result.error);
+      setError({ code: result.code, message: result.message });
     }
     setCreating(false);
   }
@@ -90,7 +91,7 @@ export function CodeGeneratorPanel() {
     if (result.ok) {
       setGenerated(result.data);
     } else {
-      setError(result.error);
+      setError({ code: result.code, message: result.message });
     }
     setGenerating(false);
   }
@@ -131,11 +132,7 @@ export function CodeGeneratorPanel() {
         </button>
       </form>
 
-      {error && (
-        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
+      {error && <ErrorGuidance code={error.code} fallback={error.message} />}
 
       {searched && !selected && (
         <div className="rounded-md border border-gray-200 bg-white">

@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { ok, err, type ActionResult } from "@/lib/action-result";
+import { ok, err, AppError, type ActionResult } from "@/lib/action-result";
 
 export type CustomerSearchResult = {
   id: string;
@@ -38,7 +38,7 @@ export async function searchCustomers(query: {
     if (mobileNumber) builder = builder.ilike("mobile_number", `%${mobileNumber}%`);
 
     const { data, error } = await builder.limit(10);
-    if (error) throw new Error(error.message);
+    if (error) throw new AppError("DB_ERROR", error.message);
     return ok(data ?? []);
   } catch (e) {
     return err(e);
@@ -56,7 +56,7 @@ export async function createCustomer(input: {
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (!user) throw new Error("Not signed in");
+    if (!user) throw new AppError("NOT_SIGNED_IN", "Not signed in");
 
     const { data: staff } = await supabase
       .from("staff")
@@ -64,7 +64,9 @@ export async function createCustomer(input: {
       .eq("id", user.id)
       .maybeSingle();
 
-    if (!staff) throw new Error("Your account isn't provisioned for a company");
+    if (!staff) {
+      throw new AppError("NOT_PROVISIONED", "Your account isn't provisioned for a company");
+    }
 
     const { data, error } = await supabase
       .from("customers")
@@ -77,7 +79,7 @@ export async function createCustomer(input: {
       .select("id, full_name, dob, mobile_number")
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) throw new AppError("DB_ERROR", error.message);
     return ok(data);
   } catch (e) {
     return err(e);
@@ -94,7 +96,12 @@ export async function generateCode(
       p_customer_id: customerId,
     });
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      if (error.message.includes("Customer not found or not accessible")) {
+        throw new AppError("CUSTOMER_NOT_ACCESSIBLE", error.message);
+      }
+      throw new AppError("DB_ERROR", error.message);
+    }
     return ok(data as GeneratedCode);
   } catch (e) {
     return err(e);
