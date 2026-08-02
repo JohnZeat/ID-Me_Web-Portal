@@ -11,8 +11,14 @@ export default async function AdminPage() {
     redirect("/login");
   }
 
-  // TODO(build sequencing step 3): gate this on an "Admin" role once
-  // roles live in Supabase (staff table + RLS), not just "is logged in."
+  const { data: staff } = await supabase
+    .from("staff")
+    .select("company_id, role")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  // TODO(build sequencing step 3): gate this on staff.role === "admin"
+  // once staff invites/roles have UI, not just "has a staff row."
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10">
@@ -21,12 +27,19 @@ export default async function AdminPage() {
           Admin Area
         </h1>
         <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <p className="text-sm text-gray-600">
-            Staff management, API key management, company settings, and the
-            audit log land here — build sequencing step 3 in the solution
-            design, after the core verification loop and customer list
-            sync are working.
-          </p>
+          {!staff ? (
+            <p className="text-sm text-amber-800">
+              Your account isn&apos;t provisioned for any company yet.
+              Contact your admin to be added as staff.
+            </p>
+          ) : (
+            <p className="text-sm text-gray-600">
+              Staff management, API key management, company settings, and the
+              audit log land here — build sequencing step 3 in the solution
+              design, after the core verification loop and customer list
+              sync are working.
+            </p>
+          )}
         </div>
       </div>
     </main>

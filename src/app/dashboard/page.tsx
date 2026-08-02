@@ -12,6 +12,12 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
+  const { data: staff } = await supabase
+    .from("staff")
+    .select("company_id, role")
+    .eq("id", user.id)
+    .maybeSingle();
+
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10">
       <div className="mx-auto max-w-2xl">
@@ -28,27 +34,32 @@ export default async function DashboardPage() {
             {user.email}
           </p>
 
-          <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
-            <p className="mb-3 text-sm text-gray-600">
-              Code generation (customer lookup + 6-digit code + 2-minute
-              expiry) plugs in here — next build phase, once the{" "}
-              <code className="rounded bg-gray-200 px-1 py-0.5 text-xs">
-                codes
-              </code>{" "}
-              and{" "}
-              <code className="rounded bg-gray-200 px-1 py-0.5 text-xs">
-                customers
-              </code>{" "}
-              tables exist in Supabase.
-            </p>
-            <button
-              disabled
-              className="rounded-md bg-gray-300 px-4 py-2 text-sm font-medium text-gray-500"
-              title="Wired up once the Supabase schema is in place"
-            >
-              Generate Code
-            </button>
-          </div>
+          {!staff ? (
+            <div className="rounded-md border border-dashed border-amber-300 bg-amber-50 p-6 text-center">
+              <p className="text-sm text-amber-800">
+                Your account isn&apos;t provisioned for any company yet.
+                Contact your admin to be added as staff.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
+              <p className="mb-3 text-sm text-gray-600">
+                Code generation (customer lookup + 6-digit code + 2-minute
+                expiry) plugs in here — next build phase, once the{" "}
+                <code className="rounded bg-gray-200 px-1 py-0.5 text-xs">
+                  codes
+                </code>{" "}
+                table exists in Supabase.
+              </p>
+              <button
+                disabled
+                className="rounded-md bg-gray-300 px-4 py-2 text-sm font-medium text-gray-500"
+                title="Wired up once the codes table is in place"
+              >
+                Generate Code
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </main>
