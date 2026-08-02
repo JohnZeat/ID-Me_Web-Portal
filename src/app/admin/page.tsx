@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { CsvUploadPanel } from "./csv-upload-panel";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -33,12 +34,14 @@ export default async function AdminPage() {
               Contact your admin to be added as staff.
             </p>
           ) : (
-            <p className="text-sm text-gray-600">
-              Staff management, API key management, company settings, and the
-              audit log land here — build sequencing step 3 in the solution
-              design, after the core verification loop and customer list
-              sync are working.
-            </p>
+            <div className="space-y-8">
+              <CsvUploadPanel />
+              <p className="text-sm text-gray-600">
+                Staff management, API key management, company settings, and
+                the audit log land here — build sequencing step 3 in the
+                solution design.
+              </p>
+            </div>
           )}
         </div>
       </div>
