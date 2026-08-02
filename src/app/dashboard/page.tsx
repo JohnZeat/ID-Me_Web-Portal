@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "./sign-out-button";
 import { CodeGeneratorPanel } from "./code-generator";
+import type { DateFormat } from "@/lib/format-date";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -19,6 +20,16 @@ export default async function DashboardPage() {
     .select("company_id, role")
     .eq("id", user.id)
     .maybeSingle();
+
+  let dateFormat: DateFormat = "DD/MM/YYYY";
+  if (staff) {
+    const { data: company } = await supabase
+      .from("companies")
+      .select("date_format")
+      .eq("id", staff.company_id)
+      .maybeSingle();
+    if (company) dateFormat = company.date_format;
+  }
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10">
@@ -54,7 +65,7 @@ export default async function DashboardPage() {
               </p>
             </div>
           ) : (
-            <CodeGeneratorPanel />
+            <CodeGeneratorPanel dateFormat={dateFormat} />
           )}
         </div>
       </div>

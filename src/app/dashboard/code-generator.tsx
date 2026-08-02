@@ -9,6 +9,7 @@ import {
   type GeneratedCode,
 } from "./actions";
 import { ErrorGuidance } from "@/components/error-guidance";
+import { formatDob, type DateFormat } from "@/lib/format-date";
 
 function useCountdown(expiresAt: string | null) {
   const [secondsLeft, setSecondsLeft] = useState(0);
@@ -32,7 +33,7 @@ function useCountdown(expiresAt: string | null) {
   return secondsLeft;
 }
 
-export function CodeGeneratorPanel() {
+export function CodeGeneratorPanel({ dateFormat }: { dateFormat: DateFormat }) {
   const [fullName, setFullName] = useState("");
   const [dob, setDob] = useState("");
   const [mobileNumber, setMobileNumber] = useState("");
@@ -191,7 +192,7 @@ export function CodeGeneratorPanel() {
                       {c.full_name}
                     </span>
                     <span className="ml-2 text-gray-500">
-                      {c.dob} · {c.mobile_number}
+                      {formatDob(c.dob, dateFormat)} · {c.mobile_number}
                     </span>
                   </button>
                 </li>
@@ -248,7 +249,8 @@ export function CodeGeneratorPanel() {
         <div className="rounded-md border border-gray-200 bg-white p-4">
           <p className="mb-1 text-sm text-gray-500">Selected customer</p>
           <p className="mb-4 text-sm font-medium text-gray-900">
-            {selected.full_name} · {selected.dob} · {selected.mobile_number}
+            {selected.full_name} · {formatDob(selected.dob, dateFormat)} ·{" "}
+            {selected.mobile_number}
           </p>
 
           {!generated ? (

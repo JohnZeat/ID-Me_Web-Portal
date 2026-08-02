@@ -124,6 +124,7 @@ export default async function AdminPage() {
                     <CompanySettingsPanel
                       initialName={settingsResult.data.name}
                       initialCodeExpirySeconds={settingsResult.data.codeExpirySeconds}
+                      initialDateFormat={settingsResult.data.dateFormat}
                       initialDomains={domainsResult.data}
                     />
                   )

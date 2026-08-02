@@ -9,14 +9,17 @@ import {
   type CompanyDomainEntry,
 } from "./actions";
 import { ErrorGuidance } from "@/components/error-guidance";
+import { DATE_FORMATS, type DateFormat } from "@/lib/format-date";
 
 export function CompanySettingsPanel({
   initialName,
   initialCodeExpirySeconds,
+  initialDateFormat,
   initialDomains,
 }: {
   initialName: string;
   initialCodeExpirySeconds: number;
+  initialDateFormat: DateFormat;
   initialDomains: CompanyDomainEntry[];
 }) {
   const router = useRouter();
@@ -25,6 +28,7 @@ export function CompanySettingsPanel({
   const [codeExpirySeconds, setCodeExpirySeconds] = useState(
     String(initialCodeExpirySeconds)
   );
+  const [dateFormat, setDateFormat] = useState<DateFormat>(initialDateFormat);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsSaved, setSettingsSaved] = useState(false);
   const [settingsError, setSettingsError] = useState<{ code: string; message: string } | null>(
@@ -46,6 +50,7 @@ export function CompanySettingsPanel({
     const result = await updateCompanySettings({
       name,
       codeExpirySeconds: Number(codeExpirySeconds),
+      dateFormat,
     });
     if (result.ok) {
       setSettingsSaved(true);
@@ -85,7 +90,7 @@ export function CompanySettingsPanel({
     <div className="space-y-8">
       <form onSubmit={handleSaveSettings} className="space-y-3">
         <p className="text-sm font-medium text-gray-700">General</p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div>
             <label className="mb-1 block text-xs font-medium text-gray-500">
               Company name
@@ -111,6 +116,22 @@ export function CompanySettingsPanel({
               onChange={(e) => setCodeExpirySeconds(e.target.value)}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-gray-900 focus:outline-none"
             />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-gray-500">
+              Date format (for DOB, etc.)
+            </label>
+            <select
+              value={dateFormat}
+              onChange={(e) => setDateFormat(e.target.value as DateFormat)}
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-gray-900 focus:outline-none"
+            >
+              {DATE_FORMATS.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
         <button

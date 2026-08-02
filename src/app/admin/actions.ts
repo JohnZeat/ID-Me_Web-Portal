@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { ok, err, AppError, type ActionResult } from "@/lib/action-result";
+import { DATE_FORMATS, type DateFormat } from "@/lib/format-date";
 
 export type SkipReason = { row: number; reason: string };
 
@@ -274,23 +275,28 @@ export async function inviteStaff(input: {
 export type CompanySettings = {
   name: string;
   codeExpirySeconds: number;
+  dateFormat: DateFormat;
 };
 
-// companies has RLS enabled with no policies for the regular client
-// (locked down entirely, same reasoning as staff/auth.users in
-// listStaff) -- these use the service role, gated by requireAdmin().
+// companies has a select policy letting staff view their own company, but
+// no update policy for the regular client -- both use the service role
+// here for consistency, gated by requireAdmin() either way.
 export async function getCompanySettings(): Promise<ActionResult<CompanySettings>> {
   try {
     const staff = await requireAdmin();
     const serviceClient = createServiceClient();
     const { data, error } = await serviceClient
       .from("companies")
-      .select("name, code_expiry_seconds")
+      .select("name, code_expiry_seconds, date_format")
       .eq("id", staff.company_id)
       .single();
 
     if (error) throw new AppError("DB_ERROR", error.message);
-    return ok({ name: data.name, codeExpirySeconds: data.code_expiry_seconds });
+    return ok({
+      name: data.name,
+      codeExpirySeconds: data.code_expiry_seconds,
+      dateFormat: data.date_format,
+    });
   } catch (e) {
     return err(e);
   }
@@ -299,6 +305,7 @@ export async function getCompanySettings(): Promise<ActionResult<CompanySettings
 export async function updateCompanySettings(input: {
   name: string;
   codeExpirySeconds: number;
+  dateFormat: string;
 }): Promise<ActionResult<CompanySettings>> {
   try {
     const staff = await requireAdmin();
@@ -318,16 +325,25 @@ export async function updateCompanySettings(input: {
       );
     }
 
+    if (!DATE_FORMATS.includes(input.dateFormat as DateFormat)) {
+      throw new AppError("INVALID_DATE_FORMAT", "Unrecognized date format");
+    }
+    const dateFormat = input.dateFormat as DateFormat;
+
     const serviceClient = createServiceClient();
     const { data, error } = await serviceClient
       .from("companies")
-      .update({ name, code_expiry_seconds: codeExpirySeconds })
+      .update({ name, code_expiry_seconds: codeExpirySeconds, date_format: dateFormat })
       .eq("id", staff.company_id)
-      .select("name, code_expiry_seconds")
+      .select("name, code_expiry_seconds, date_format")
       .single();
 
     if (error) throw new AppError("DB_ERROR", error.message);
-    return ok({ name: data.name, codeExpirySeconds: data.code_expiry_seconds });
+    return ok({
+      name: data.name,
+      codeExpirySeconds: data.code_expiry_seconds,
+      dateFormat: data.date_format,
+    });
   } catch (e) {
     return err(e);
   }
