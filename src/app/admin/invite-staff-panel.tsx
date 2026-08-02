@@ -7,6 +7,7 @@ import { ErrorGuidance } from "@/components/error-guidance";
 
 export function InviteStaffPanel() {
   const router = useRouter();
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<"staff" | "admin">("staff");
   const [submitting, setSubmitting] = useState(false);
@@ -18,9 +19,10 @@ export function InviteStaffPanel() {
     setError(null);
     setSuccess(null);
     setSubmitting(true);
-    const result = await inviteStaff({ email, role });
+    const result = await inviteStaff({ email, fullName, role });
     if (result.ok) {
       setSuccess(`Invite sent to ${result.data.email}`);
+      setFullName("");
       setEmail("");
       setRole("staff");
       router.refresh();
@@ -34,6 +36,14 @@ export function InviteStaffPanel() {
     <form onSubmit={handleSubmit} className="space-y-3">
       <p className="text-sm font-medium text-gray-700">Invite staff</p>
       <div className="flex flex-col gap-3 sm:flex-row">
+        <input
+          type="text"
+          required
+          placeholder="Full name"
+          value={fullName}
+          onChange={(e) => setFullName(e.target.value)}
+          className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-gray-900 focus:outline-none"
+        />
         <input
           type="email"
           required

@@ -184,7 +184,12 @@ export async function uploadCustomersCsv(
   }
 }
 
-export type StaffListEntry = { id: string; email: string; role: string };
+export type StaffListEntry = {
+  id: string;
+  email: string;
+  fullName: string | null;
+  role: string;
+};
 
 export async function listStaff(): Promise<ActionResult<StaffListEntry[]>> {
   try {
@@ -197,7 +202,7 @@ export async function listStaff(): Promise<ActionResult<StaffListEntry[]>> {
     const serviceClient = createServiceClient();
     const { data: companyStaff, error } = await serviceClient
       .from("staff")
-      .select("id, role")
+      .select("id, role, full_name")
       .eq("company_id", staff.company_id);
 
     if (error) throw new AppError("DB_ERROR", error.message);
@@ -205,7 +210,12 @@ export async function listStaff(): Promise<ActionResult<StaffListEntry[]>> {
     const list = await Promise.all(
       (companyStaff ?? []).map(async (row) => {
         const { data } = await serviceClient.auth.admin.getUserById(row.id);
-        return { id: row.id, email: data.user?.email ?? "(unknown)", role: row.role };
+        return {
+          id: row.id,
+          email: data.user?.email ?? "(unknown)",
+          fullName: row.full_name,
+          role: row.role,
+        };
       })
     );
 
@@ -217,10 +227,14 @@ export async function listStaff(): Promise<ActionResult<StaffListEntry[]>> {
 
 export async function inviteStaff(input: {
   email: string;
+  fullName: string;
   role: "staff" | "admin";
 }): Promise<ActionResult<{ email: string }>> {
   try {
     const staff = await requireAdmin();
+
+    const fullName = input.fullName.trim();
+    if (!fullName) throw new AppError("INVALID_FULL_NAME", "Full name can't be empty");
 
     const email = input.email.trim().toLowerCase();
     const domain = email.split("@")[1];
@@ -263,6 +277,7 @@ export async function inviteStaff(input: {
       id: invited.user.id,
       company_id: staff.company_id,
       role: input.role,
+      full_name: fullName,
     });
     if (staffError) throw new AppError("DB_ERROR", staffError.message);
 

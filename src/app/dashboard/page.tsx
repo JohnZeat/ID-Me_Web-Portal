@@ -17,7 +17,7 @@ export default async function DashboardPage() {
 
   const { data: staff } = await supabase
     .from("staff")
-    .select("company_id, role")
+    .select("company_id, role, full_name")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -52,20 +52,26 @@ export default async function DashboardPage() {
         </div>
 
         <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <p className="mb-1 text-sm text-gray-500">Signed in as</p>
-          <p className="mb-6 text-sm font-medium text-gray-900">
-            {user.email}
-          </p>
-
           {!staff ? (
-            <div className="rounded-md border border-dashed border-amber-300 bg-amber-50 p-6 text-center">
-              <p className="text-sm text-amber-800">
-                Your account isn&apos;t provisioned for any company yet.
-                Contact your admin to be added as staff.
+            <>
+              <p className="mb-1 text-sm text-gray-500">Signed in as</p>
+              <p className="mb-6 text-sm font-medium text-gray-900">
+                {user.email}
               </p>
-            </div>
+              <div className="rounded-md border border-dashed border-amber-300 bg-amber-50 p-6 text-center">
+                <p className="text-sm text-amber-800">
+                  Your account isn&apos;t provisioned for any company yet.
+                  Contact your admin to be added as staff.
+                </p>
+              </div>
+            </>
           ) : (
-            <CodeGeneratorPanel dateFormat={dateFormat} />
+            <>
+              <p className="mb-6 text-lg font-medium text-gray-900">
+                Hi {staff.full_name ?? user.email}, what would you like to do?
+              </p>
+              <CodeGeneratorPanel dateFormat={dateFormat} />
+            </>
           )}
         </div>
       </div>

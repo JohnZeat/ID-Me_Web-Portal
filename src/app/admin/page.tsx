@@ -91,7 +91,12 @@ export default async function AdminPage() {
                         key={s.id}
                         className="flex items-center justify-between px-4 py-2 text-sm"
                       >
-                        <span className="text-gray-900">{s.email}</span>
+                        <span className="text-gray-900">
+                          {s.fullName ?? s.email}
+                          {s.fullName && (
+                            <span className="ml-2 text-gray-500">{s.email}</span>
+                          )}
+                        </span>
                         <span className="text-gray-500">{s.role}</span>
                       </li>
                     ))}
