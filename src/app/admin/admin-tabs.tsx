@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 
-const TABS = ["Staff", "Customers", "Settings", "API"] as const;
+const TABS = ["Staff", "Customers", "Settings", "API", "Audit"] as const;
 type Tab = (typeof TABS)[number];
 
 export function AdminTabs({
@@ -10,11 +10,13 @@ export function AdminTabs({
   customers,
   settings,
   api,
+  audit,
 }: {
   staff: ReactNode;
   customers: ReactNode;
   settings: ReactNode;
   api: ReactNode;
+  audit: ReactNode;
 }) {
   const [active, setActive] = useState<Tab>("Staff");
 
@@ -23,6 +25,7 @@ export function AdminTabs({
     Customers: customers,
     Settings: settings,
     API: api,
+    Audit: audit,
   };
 
   return (

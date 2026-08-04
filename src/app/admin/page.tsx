@@ -8,6 +8,7 @@ import { CompanySettingsPanel } from "./company-settings-panel";
 import { StaffList } from "./staff-list";
 import { ApiKeyPanel } from "./api-key-panel";
 import { CustomersTable } from "./customers-table";
+import { AuditLogTable } from "./audit-log-table";
 import { AdminTabs } from "./admin-tabs";
 import {
   listStaff,
@@ -160,10 +161,6 @@ export default async function AdminPage() {
                       )
                     )}
                   </div>
-                  <p className="text-sm text-gray-600">
-                    The audit log lands here — build sequencing step 3 in
-                    the solution design.
-                  </p>
                 </>
               }
               api={
@@ -178,6 +175,7 @@ export default async function AdminPage() {
                   )
                 )
               }
+              audit={<AuditLogTable />}
             />
           )}
         </div>

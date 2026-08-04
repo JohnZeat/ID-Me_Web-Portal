@@ -85,6 +85,24 @@ async function requireAdmin() {
   return staff;
 }
 
+// Best-effort: a logging hiccup shouldn't fail the action that
+// triggered it, so failures here are swallowed (not surfaced via err()).
+async function logAuditEvent(
+  companyId: string,
+  actorId: string,
+  action: string,
+  details: Record<string, unknown> = {}
+): Promise<void> {
+  try {
+    const supabase = await createClient();
+    await supabase
+      .from("audit_log")
+      .insert({ company_id: companyId, actor_id: actorId, action, details });
+  } catch {
+    // Swallowed intentionally -- see comment above.
+  }
+}
+
 export async function uploadCustomersCsv(
   formData: FormData
 ): Promise<ActionResult<CsvUploadResult>> {
@@ -179,7 +197,13 @@ export async function uploadCustomersCsv(
       throw new AppError("DB_ERROR", error.message);
     }
 
-    return ok({ upserted: count ?? validRows.length, skipped });
+    const upserted = count ?? validRows.length;
+    await logAuditEvent(staff.company_id, staff.id, "CUSTOMERS_CSV_UPLOADED", {
+      upserted,
+      skippedCount: skipped.length,
+    });
+
+    return ok({ upserted, skipped });
   } catch (e) {
     return err(e);
   }
@@ -327,8 +351,18 @@ export async function offboardStaff(staffId: string): Promise<ActionResult<null>
       }
     }
 
+    // Capture identifying info before deletion -- auth.users is gone
+    // afterward, so there's nothing left to look up for the log.
+    const { data: targetUser } = await serviceClient.auth.admin.getUserById(staffId);
+    const targetEmail = targetUser.user?.email ?? "(unknown)";
+
     const { error: deleteError } = await serviceClient.auth.admin.deleteUser(staffId);
     if (deleteError) throw new AppError("DB_ERROR", deleteError.message);
+
+    await logAuditEvent(staff.company_id, staff.id, "STAFF_REMOVED", {
+      email: targetEmail,
+      role: target.role,
+    });
 
     return ok(null);
   } catch (e) {
@@ -390,6 +424,12 @@ async function inviteOneStaffMember(
     full_name: fullName,
   });
   if (staffError) throw new AppError("DB_ERROR", staffError.message);
+
+  await logAuditEvent(staff.company_id, staff.id, "STAFF_INVITED", {
+    email,
+    fullName,
+    role: input.role,
+  });
 
   return { email };
 }
@@ -482,6 +522,11 @@ export async function uploadStaffCsv(
       }
     }
 
+    await logAuditEvent(staff.company_id, staff.id, "STAFF_CSV_UPLOADED", {
+      invited,
+      skippedCount: skipped.length,
+    });
+
     return ok({ invited, skipped });
   } catch (e) {
     return err(e);
@@ -555,6 +600,13 @@ export async function updateCompanySettings(input: {
       .single();
 
     if (error) throw new AppError("DB_ERROR", error.message);
+
+    await logAuditEvent(staff.company_id, staff.id, "COMPANY_SETTINGS_UPDATED", {
+      name: data.name,
+      codeExpirySeconds: data.code_expiry_seconds,
+      dateFormat: data.date_format,
+    });
+
     return ok({
       name: data.name,
       codeExpirySeconds: data.code_expiry_seconds,
@@ -617,6 +669,9 @@ export async function addCompanyDomain(
       }
       throw new AppError("DB_ERROR", error.message);
     }
+
+    await logAuditEvent(staff.company_id, staff.id, "DOMAIN_ADDED", { domain });
+
     return ok(data);
   } catch (e) {
     return err(e);
@@ -627,13 +682,20 @@ export async function removeCompanyDomain(domainId: string): Promise<ActionResul
   try {
     const staff = await requireAdmin();
     const supabase = await createClient();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("company_domains")
       .delete()
       .eq("id", domainId)
-      .eq("company_id", staff.company_id);
+      .eq("company_id", staff.company_id)
+      .select("domain")
+      .maybeSingle();
 
     if (error) throw new AppError("DB_ERROR", error.message);
+
+    await logAuditEvent(staff.company_id, staff.id, "DOMAIN_REMOVED", {
+      domain: data?.domain ?? "(unknown)",
+    });
+
     return ok(null);
   } catch (e) {
     return err(e);
@@ -710,6 +772,12 @@ export async function createApiKey(
       .single();
 
     if (error) throw new AppError("DB_ERROR", error.message);
+
+    await logAuditEvent(staff.company_id, staff.id, "API_KEY_CREATED", {
+      name,
+      keyPrefix,
+    });
+
     return ok({ rawKey, entry: toApiKeyEntry(data) });
   } catch (e) {
     return err(e);
@@ -720,14 +788,84 @@ export async function revokeApiKey(id: string): Promise<ActionResult<null>> {
   try {
     const staff = await requireAdmin();
     const supabase = await createClient();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("api_keys")
       .update({ revoked_at: new Date().toISOString() })
       .eq("id", id)
-      .eq("company_id", staff.company_id);
+      .eq("company_id", staff.company_id)
+      .select("name")
+      .maybeSingle();
 
     if (error) throw new AppError("DB_ERROR", error.message);
+
+    await logAuditEvent(staff.company_id, staff.id, "API_KEY_REVOKED", {
+      name: data?.name ?? "(unknown)",
+    });
+
     return ok(null);
+  } catch (e) {
+    return err(e);
+  }
+}
+
+export type AuditLogEntry = {
+  id: string;
+  action: string;
+  details: Record<string, unknown>;
+  actorEmail: string | null;
+  createdAt: string;
+};
+
+export type AuditLogPage = {
+  entries: AuditLogEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export async function listAuditLog(input: {
+  page: number;
+  pageSize: number;
+}): Promise<ActionResult<AuditLogPage>> {
+  try {
+    const staff = await requireAdmin();
+    const supabase = await createClient();
+
+    const page = Math.max(1, Math.trunc(input.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Math.trunc(input.pageSize) || 20));
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    const { data, error, count } = await supabase
+      .from("audit_log")
+      .select("id, actor_id, action, details, created_at", { count: "exact" })
+      .eq("company_id", staff.company_id)
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (error) throw new AppError("DB_ERROR", error.message);
+
+    // auth.users (for actor email) isn't reachable from the regular
+    // client, so this part needs the service role, same as listStaff.
+    const serviceClient = createServiceClient();
+    const entries = await Promise.all(
+      (data ?? []).map(async (row) => {
+        let actorEmail: string | null = null;
+        if (row.actor_id) {
+          const { data: userData } = await serviceClient.auth.admin.getUserById(row.actor_id);
+          actorEmail = userData.user?.email ?? null;
+        }
+        return {
+          id: row.id,
+          action: row.action,
+          details: (row.details ?? {}) as Record<string, unknown>,
+          actorEmail,
+          createdAt: row.created_at,
+        };
+      })
+    );
+
+    return ok({ entries, total: count ?? 0, page, pageSize });
   } catch (e) {
     return err(e);
   }
