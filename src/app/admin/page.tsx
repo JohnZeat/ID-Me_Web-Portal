@@ -7,6 +7,7 @@ import { StaffCsvUploadPanel } from "./staff-csv-upload-panel";
 import { CompanySettingsPanel } from "./company-settings-panel";
 import { StaffList } from "./staff-list";
 import { ApiKeyPanel } from "./api-key-panel";
+import { AdminTabs } from "./admin-tabs";
 import {
   listStaff,
   getCompanySettings,
@@ -14,6 +15,28 @@ import {
   listApiKeys,
 } from "./actions";
 import { getErrorGuidanceForStaff } from "@/lib/error-guidance";
+
+function ErrorBox({
+  guidanceHtml,
+  fallback,
+}: {
+  guidanceHtml: string | null;
+  fallback: string;
+}) {
+  if (guidanceHtml) {
+    return (
+      <div
+        className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700"
+        dangerouslySetInnerHTML={{ __html: guidanceHtml }}
+      />
+    );
+  }
+  return (
+    <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+      {fallback}
+    </p>
+  );
+}
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -32,8 +55,8 @@ export default async function AdminPage() {
     .maybeSingle();
 
   const isAdmin = !!staff && staff.role === "admin";
+
   const staffListResult = isAdmin ? await listStaff() : null;
-  const staffList = staffListResult?.ok ? staffListResult.data : [];
   const staffListGuidance =
     staffListResult && !staffListResult.ok
       ? await getErrorGuidanceForStaff(staffListResult.code)
@@ -59,7 +82,7 @@ export default async function AdminPage() {
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10">
-      <div className="mx-auto max-w-2xl">
+      <div className="mx-auto max-w-4xl">
         <div className="mb-8 flex items-center justify-between">
           <h1 className="text-xl font-semibold text-gray-900">
             Admin Area
@@ -82,85 +105,72 @@ export default async function AdminPage() {
               This area is restricted to company admins.
             </p>
           ) : (
-            <div className="space-y-8">
-              <div>
-                <p className="mb-3 text-sm font-medium text-gray-700">
-                  Current staff
-                </p>
-                {staffListResult && !staffListResult.ok ? (
-                  staffListGuidance ? (
-                    <div
-                      className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700"
-                      dangerouslySetInnerHTML={{ __html: staffListGuidance.html }}
-                    />
-                  ) : (
-                    <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-                      {staffListResult.message}
+            <AdminTabs
+              staff={
+                <>
+                  <div>
+                    <p className="mb-3 text-sm font-medium text-gray-700">
+                      Current staff
                     </p>
-                  )
-                ) : (
-                  <StaffList staffList={staffList} currentUserId={user.id} />
-                )}
-              </div>
-
-              <InviteStaffPanel />
-
-              <StaffCsvUploadPanel />
-
-              <CsvUploadPanel />
-
-              <div>
-                <p className="mb-3 text-sm font-medium text-gray-700">
-                  Company settings
-                </p>
-                {settingsFailure ? (
-                  settingsGuidance ? (
-                    <div
-                      className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700"
-                      dangerouslySetInnerHTML={{ __html: settingsGuidance.html }}
-                    />
-                  ) : (
-                    <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-                      {settingsFailure.message}
+                    {staffListResult && !staffListResult.ok ? (
+                      <ErrorBox
+                        guidanceHtml={staffListGuidance?.html ?? null}
+                        fallback={staffListResult.message}
+                      />
+                    ) : (
+                      <StaffList
+                        staffList={staffListResult?.ok ? staffListResult.data : []}
+                        currentUserId={user.id}
+                      />
+                    )}
+                  </div>
+                  <InviteStaffPanel />
+                  <StaffCsvUploadPanel />
+                </>
+              }
+              customers={<CsvUploadPanel />}
+              settings={
+                <>
+                  <div>
+                    <p className="mb-3 text-sm font-medium text-gray-700">
+                      Company settings
                     </p>
-                  )
-                ) : (
-                  settingsResult?.ok &&
-                  domainsResult?.ok && (
-                    <CompanySettingsPanel
-                      initialName={settingsResult.data.name}
-                      initialCodeExpirySeconds={settingsResult.data.codeExpirySeconds}
-                      initialDateFormat={settingsResult.data.dateFormat}
-                      initialDomains={domainsResult.data}
-                    />
-                  )
-                )}
-              </div>
-
-              <div>
-                {apiKeysResult && !apiKeysResult.ok ? (
-                  apiKeysGuidance ? (
-                    <div
-                      className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700"
-                      dangerouslySetInnerHTML={{ __html: apiKeysGuidance.html }}
-                    />
-                  ) : (
-                    <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-                      {apiKeysResult.message}
-                    </p>
-                  )
+                    {settingsFailure ? (
+                      <ErrorBox
+                        guidanceHtml={settingsGuidance?.html ?? null}
+                        fallback={settingsFailure.message}
+                      />
+                    ) : (
+                      settingsResult?.ok &&
+                      domainsResult?.ok && (
+                        <CompanySettingsPanel
+                          initialName={settingsResult.data.name}
+                          initialCodeExpirySeconds={settingsResult.data.codeExpirySeconds}
+                          initialDateFormat={settingsResult.data.dateFormat}
+                          initialDomains={domainsResult.data}
+                        />
+                      )
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    The audit log lands here — build sequencing step 3 in
+                    the solution design.
+                  </p>
+                </>
+              }
+              api={
+                apiKeysResult && !apiKeysResult.ok ? (
+                  <ErrorBox
+                    guidanceHtml={apiKeysGuidance?.html ?? null}
+                    fallback={apiKeysResult.message}
+                  />
                 ) : (
                   apiKeysResult?.ok && (
                     <ApiKeyPanel initialKeys={apiKeysResult.data} />
                   )
-                )}
-              </div>
-
-              <p className="text-sm text-gray-600">
-                The audit log lands here — build sequencing step 3 in the
-                solution design.
-              </p>
-            </div>
+                )
+              }
+            />
           )}
         </div>
       </div>
