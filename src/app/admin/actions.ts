@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { ok, err, AppError, type ActionResult } from "@/lib/action-result";
 import { DATE_FORMATS, type DateFormat } from "@/lib/format-date";
+import { generateApiKey } from "@/lib/api-key-auth";
 
 export type SkipReason = { row: number; reason: string };
 
@@ -569,6 +570,99 @@ export async function removeCompanyDomain(domainId: string): Promise<ActionResul
       .from("company_domains")
       .delete()
       .eq("id", domainId)
+      .eq("company_id", staff.company_id);
+
+    if (error) throw new AppError("DB_ERROR", error.message);
+    return ok(null);
+  } catch (e) {
+    return err(e);
+  }
+}
+
+export type ApiKeyEntry = {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+};
+
+function toApiKeyEntry(row: {
+  id: string;
+  name: string;
+  key_prefix: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}): ApiKeyEntry {
+  return {
+    id: row.id,
+    name: row.name,
+    keyPrefix: row.key_prefix,
+    createdAt: row.created_at,
+    lastUsedAt: row.last_used_at,
+    revokedAt: row.revoked_at,
+  };
+}
+
+// api_keys already has an admin-scoped RLS policy, so the regular
+// client works directly here, same as company_domains.
+export async function listApiKeys(): Promise<ActionResult<ApiKeyEntry[]>> {
+  try {
+    const staff = await requireAdmin();
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("api_keys")
+      .select("id, name, key_prefix, created_at, last_used_at, revoked_at")
+      .eq("company_id", staff.company_id)
+      .order("created_at", { ascending: false });
+
+    if (error) throw new AppError("DB_ERROR", error.message);
+    return ok((data ?? []).map(toApiKeyEntry));
+  } catch (e) {
+    return err(e);
+  }
+}
+
+export async function createApiKey(
+  nameInput: string
+): Promise<ActionResult<{ rawKey: string; entry: ApiKeyEntry }>> {
+  try {
+    const staff = await requireAdmin();
+    const name = nameInput.trim();
+    if (!name) throw new AppError("INVALID_API_KEY_NAME", "Name can't be empty");
+
+    const { rawKey, keyHash, keyPrefix } = generateApiKey();
+
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("api_keys")
+      .insert({
+        company_id: staff.company_id,
+        name,
+        key_hash: keyHash,
+        key_prefix: keyPrefix,
+        created_by: staff.id,
+      })
+      .select("id, name, key_prefix, created_at, last_used_at, revoked_at")
+      .single();
+
+    if (error) throw new AppError("DB_ERROR", error.message);
+    return ok({ rawKey, entry: toApiKeyEntry(data) });
+  } catch (e) {
+    return err(e);
+  }
+}
+
+export async function revokeApiKey(id: string): Promise<ActionResult<null>> {
+  try {
+    const staff = await requireAdmin();
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from("api_keys")
+      .update({ revoked_at: new Date().toISOString() })
+      .eq("id", id)
       .eq("company_id", staff.company_id);
 
     if (error) throw new AppError("DB_ERROR", error.message);

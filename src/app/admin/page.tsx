@@ -6,7 +6,13 @@ import { InviteStaffPanel } from "./invite-staff-panel";
 import { StaffCsvUploadPanel } from "./staff-csv-upload-panel";
 import { CompanySettingsPanel } from "./company-settings-panel";
 import { StaffList } from "./staff-list";
-import { listStaff, getCompanySettings, listCompanyDomains } from "./actions";
+import { ApiKeyPanel } from "./api-key-panel";
+import {
+  listStaff,
+  getCompanySettings,
+  listCompanyDomains,
+  listApiKeys,
+} from "./actions";
 import { getErrorGuidanceForStaff } from "@/lib/error-guidance";
 
 export default async function AdminPage() {
@@ -44,6 +50,12 @@ export default async function AdminPage() {
   const settingsGuidance = settingsFailure
     ? await getErrorGuidanceForStaff(settingsFailure.code)
     : null;
+
+  const apiKeysResult = isAdmin ? await listApiKeys() : null;
+  const apiKeysGuidance =
+    apiKeysResult && !apiKeysResult.ok
+      ? await getErrorGuidanceForStaff(apiKeysResult.code)
+      : null;
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10">
@@ -125,9 +137,28 @@ export default async function AdminPage() {
                 )}
               </div>
 
+              <div>
+                {apiKeysResult && !apiKeysResult.ok ? (
+                  apiKeysGuidance ? (
+                    <div
+                      className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700"
+                      dangerouslySetInnerHTML={{ __html: apiKeysGuidance.html }}
+                    />
+                  ) : (
+                    <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                      {apiKeysResult.message}
+                    </p>
+                  )
+                ) : (
+                  apiKeysResult?.ok && (
+                    <ApiKeyPanel initialKeys={apiKeysResult.data} />
+                  )
+                )}
+              </div>
+
               <p className="text-sm text-gray-600">
-                API key management and the audit log land here — build
-                sequencing step 3 in the solution design.
+                The audit log lands here — build sequencing step 3 in the
+                solution design.
               </p>
             </div>
           )}
