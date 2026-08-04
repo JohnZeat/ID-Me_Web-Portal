@@ -7,6 +7,7 @@ import { StaffCsvUploadPanel } from "./staff-csv-upload-panel";
 import { CompanySettingsPanel } from "./company-settings-panel";
 import { StaffList } from "./staff-list";
 import { ApiKeyPanel } from "./api-key-panel";
+import { CustomersTable } from "./customers-table";
 import { AdminTabs } from "./admin-tabs";
 import {
   listStaff,
@@ -82,7 +83,7 @@ export default async function AdminPage() {
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10">
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-[1080px]">
         <div className="mb-8 flex items-center justify-between">
           <h1 className="text-xl font-semibold text-gray-900">
             Admin Area
@@ -128,7 +129,14 @@ export default async function AdminPage() {
                   <StaffCsvUploadPanel />
                 </>
               }
-              customers={<CsvUploadPanel />}
+              customers={
+                <>
+                  <CustomersTable
+                    dateFormat={settingsResult?.ok ? settingsResult.data.dateFormat : "DD/MM/YYYY"}
+                  />
+                  <CsvUploadPanel />
+                </>
+              }
               settings={
                 <>
                   <div>

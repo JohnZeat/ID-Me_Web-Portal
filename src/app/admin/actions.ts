@@ -185,6 +185,67 @@ export async function uploadCustomersCsv(
   }
 }
 
+export type CustomerEntry = {
+  id: string;
+  fullName: string;
+  dob: string;
+  mobileNumber: string;
+};
+
+export type CustomerPage = {
+  customers: CustomerEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export async function listCustomers(input: {
+  search?: string;
+  page: number;
+  pageSize: number;
+}): Promise<ActionResult<CustomerPage>> {
+  try {
+    const staff = await requireAdmin();
+    const supabase = await createClient();
+
+    const page = Math.max(1, Math.trunc(input.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Math.trunc(input.pageSize) || 20));
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+      .from("customers")
+      .select("id, full_name, dob, mobile_number", { count: "exact" })
+      .eq("company_id", staff.company_id)
+      .order("full_name");
+
+    // Commas are the .or() filter's own separator syntax -- strip them
+    // from user input so a name/search containing one can't break the
+    // query instead of just failing to match.
+    const search = input.search?.trim().replace(/,/g, "");
+    if (search) {
+      query = query.or(`full_name.ilike.%${search}%,mobile_number.ilike.%${search}%`);
+    }
+
+    const { data, error, count } = await query.range(from, to);
+    if (error) throw new AppError("DB_ERROR", error.message);
+
+    return ok({
+      customers: (data ?? []).map((row) => ({
+        id: row.id,
+        fullName: row.full_name,
+        dob: row.dob,
+        mobileNumber: row.mobile_number,
+      })),
+      total: count ?? 0,
+      page,
+      pageSize,
+    });
+  } catch (e) {
+    return err(e);
+  }
+}
+
 export type StaffListEntry = {
   id: string;
   email: string;
