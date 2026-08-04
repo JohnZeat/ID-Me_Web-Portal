@@ -73,7 +73,7 @@ async function requireAdmin() {
 
   const { data: staff } = await supabase
     .from("staff")
-    .select("company_id, role")
+    .select("id, company_id, role")
     .eq("id", user.id)
     .maybeSingle();
   if (!staff) {
@@ -220,6 +220,55 @@ export async function listStaff(): Promise<ActionResult<StaffListEntry[]>> {
     );
 
     return ok(list);
+  } catch (e) {
+    return err(e);
+  }
+}
+
+// Deletes the auth.users row via the Admin API; staff.id references
+// auth.users(id) on delete cascade, so the staff row is removed
+// automatically. codes.created_by is ON DELETE SET NULL, so past
+// generated codes are preserved with the creator reference cleared.
+export async function offboardStaff(staffId: string): Promise<ActionResult<null>> {
+  try {
+    const staff = await requireAdmin();
+
+    if (staffId === staff.id) {
+      throw new AppError("CANNOT_REMOVE_SELF", "You can't remove your own staff account");
+    }
+
+    const serviceClient = createServiceClient();
+
+    const { data: target, error: targetError } = await serviceClient
+      .from("staff")
+      .select("company_id, role")
+      .eq("id", staffId)
+      .maybeSingle();
+
+    if (targetError) throw new AppError("DB_ERROR", targetError.message);
+    if (!target || target.company_id !== staff.company_id) {
+      throw new AppError("STAFF_NOT_FOUND", "That staff member wasn't found in your company");
+    }
+
+    if (target.role === "admin") {
+      const { count, error: countError } = await serviceClient
+        .from("staff")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", staff.company_id)
+        .eq("role", "admin");
+      if (countError) throw new AppError("DB_ERROR", countError.message);
+      if ((count ?? 0) <= 1) {
+        throw new AppError(
+          "LAST_ADMIN",
+          "Can't remove the last admin -- promote another staff member to admin first"
+        );
+      }
+    }
+
+    const { error: deleteError } = await serviceClient.auth.admin.deleteUser(staffId);
+    if (deleteError) throw new AppError("DB_ERROR", deleteError.message);
+
+    return ok(null);
   } catch (e) {
     return err(e);
   }

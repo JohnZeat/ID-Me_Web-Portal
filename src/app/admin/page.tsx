@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { CsvUploadPanel } from "./csv-upload-panel";
 import { InviteStaffPanel } from "./invite-staff-panel";
 import { CompanySettingsPanel } from "./company-settings-panel";
+import { StaffList } from "./staff-list";
 import { listStaff, getCompanySettings, listCompanyDomains } from "./actions";
 import { getErrorGuidanceForStaff } from "@/lib/error-guidance";
 
@@ -85,22 +86,7 @@ export default async function AdminPage() {
                     </p>
                   )
                 ) : (
-                  <ul className="divide-y divide-gray-200 rounded-md border border-gray-200">
-                    {staffList.map((s) => (
-                      <li
-                        key={s.id}
-                        className="flex items-center justify-between px-4 py-2 text-sm"
-                      >
-                        <span className="text-gray-900">
-                          {s.fullName ?? s.email}
-                          {s.fullName && (
-                            <span className="ml-2 text-gray-500">{s.email}</span>
-                          )}
-                        </span>
-                        <span className="text-gray-500">{s.role}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <StaffList staffList={staffList} currentUserId={user.id} />
                 )}
               </div>
 
