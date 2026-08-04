@@ -16,6 +16,32 @@ export default function AcceptInvitePage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    // Explicitly consume the invite link's tokens from the URL fragment
+    // rather than relying on supabase-js's automatic detection, which can
+    // silently skip processing them if a session already exists in this
+    // browser (e.g. an admin testing an invite while still signed in) --
+    // setSession() here always forces the switch to the invited user.
+    const hash = window.location.hash.startsWith("#")
+      ? window.location.hash.slice(1)
+      : window.location.hash;
+    const params = new URLSearchParams(hash);
+    const accessToken = params.get("access_token");
+    const refreshToken = params.get("refresh_token");
+
+    if (accessToken && refreshToken) {
+      supabase.auth
+        .setSession({ access_token: accessToken, refresh_token: refreshToken })
+        .then(({ data, error }) => {
+          setHasSession(!!data.session && !error);
+          setReady(true);
+          // Drop the tokens from the URL bar/history now that they're consumed.
+          window.history.replaceState(null, "", window.location.pathname);
+        });
+      return;
+    }
+
+    // No tokens in the URL (e.g. a page refresh mid-flow) -- fall back to
+    // whatever session setSession() already established above.
     supabase.auth.getSession().then(({ data: { session } }) => {
       setHasSession(!!session);
       setReady(true);
