@@ -43,13 +43,25 @@ export function CustomersTable({ dateFormat }: { dateFormat: DateFormat }) {
   return (
     <div className="space-y-3">
       <p className="text-sm font-medium text-gray-700">Customers</p>
-      <input
-        type="text"
-        placeholder="Search by name or mobile..."
-        value={search}
-        onChange={(e) => handleSearchChange(e.target.value)}
-        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 focus:border-gray-900 focus:outline-none"
-      />
+      <div className="relative">
+        <input
+          type="text"
+          placeholder="Search by name or mobile..."
+          value={search}
+          onChange={(e) => handleSearchChange(e.target.value)}
+          className="w-full rounded-md border border-gray-300 px-3 py-2 pr-9 text-sm text-gray-700 focus:border-gray-900 focus:outline-none"
+        />
+        {search && (
+          <button
+            type="button"
+            onClick={() => handleSearchChange("")}
+            aria-label="Clear search"
+            className="absolute top-1/2 right-2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+          >
+            ✕
+          </button>
+        )}
+      </div>
 
       {error && <ErrorGuidance code={error.code} fallback={error.message} />}
 
