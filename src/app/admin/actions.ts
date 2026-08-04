@@ -274,6 +274,71 @@ export async function offboardStaff(staffId: string): Promise<ActionResult<null>
   }
 }
 
+type AdminStaff = { id: string; company_id: string; role: string };
+
+// Shared core used by both the single-invite form and the bulk CSV
+// upload: validates the domain, sends the Supabase invite, and creates
+// the staff row. Throws AppError on failure -- callers decide whether
+// that aborts the whole request (single invite) or just skips this row
+// and continues (bulk upload).
+async function inviteOneStaffMember(
+  staff: AdminStaff,
+  redirectTo: string,
+  input: { email: string; fullName: string; role: "staff" | "admin" }
+): Promise<{ email: string }> {
+  const fullName = input.fullName.trim();
+  if (!fullName) throw new AppError("INVALID_FULL_NAME", "Full name can't be empty");
+
+  const email = input.email.trim().toLowerCase();
+  const domain = email.split("@")[1];
+  if (!domain) throw new AppError("INVALID_EMAIL", "Invalid email address");
+
+  const supabase = await createClient();
+  const { data: domainMatch } = await supabase
+    .from("company_domains")
+    .select("id")
+    .eq("company_id", staff.company_id)
+    .eq("domain", domain)
+    .maybeSingle();
+
+  if (!domainMatch) {
+    throw new AppError(
+      "DOMAIN_NOT_REGISTERED",
+      `${domain} isn't a registered domain for your company. Add it before inviting this address.`
+    );
+  }
+
+  const serviceClient = createServiceClient();
+  const { data: invited, error } = await serviceClient.auth.admin.inviteUserByEmail(
+    email,
+    { redirectTo }
+  );
+  if (error) {
+    if (error.message.toLowerCase().includes("already")) {
+      throw new AppError("USER_ALREADY_EXISTS", error.message);
+    }
+    throw new AppError("DB_ERROR", error.message);
+  }
+  if (!invited.user) throw new AppError("INVITE_FAILED", "Invite failed");
+
+  const { error: staffError } = await serviceClient.from("staff").insert({
+    id: invited.user.id,
+    company_id: staff.company_id,
+    role: input.role,
+    full_name: fullName,
+  });
+  if (staffError) throw new AppError("DB_ERROR", staffError.message);
+
+  return { email };
+}
+
+async function inviteRedirectTo(): Promise<string> {
+  const headersList = await headers();
+  const host = headersList.get("host");
+  const protocol = host?.startsWith("localhost") ? "http" : "https";
+  return `${protocol}://${host}/invite/accept`;
+}
+
 export async function inviteStaff(input: {
   email: string;
   fullName: string;
@@ -281,56 +346,81 @@ export async function inviteStaff(input: {
 }): Promise<ActionResult<{ email: string }>> {
   try {
     const staff = await requireAdmin();
+    const redirectTo = await inviteRedirectTo();
+    return ok(await inviteOneStaffMember(staff, redirectTo, input));
+  } catch (e) {
+    return err(e);
+  }
+}
 
-    const fullName = input.fullName.trim();
-    if (!fullName) throw new AppError("INVALID_FULL_NAME", "Full name can't be empty");
+export type StaffCsvUploadResult = {
+  invited: number;
+  skipped: SkipReason[];
+};
 
-    const email = input.email.trim().toLowerCase();
-    const domain = email.split("@")[1];
-    if (!domain) throw new AppError("INVALID_EMAIL", "Invalid email address");
-
-    const supabase = await createClient();
-    const { data: domainMatch } = await supabase
-      .from("company_domains")
-      .select("id")
-      .eq("company_id", staff.company_id)
-      .eq("domain", domain)
-      .maybeSingle();
-
-    if (!domainMatch) {
-      throw new AppError(
-        "DOMAIN_NOT_REGISTERED",
-        `${domain} isn't a registered domain for your company. Add it before inviting this address.`
-      );
+export async function uploadStaffCsv(
+  formData: FormData
+): Promise<ActionResult<StaffCsvUploadResult>> {
+  try {
+    const file = formData.get("file");
+    if (!(file instanceof File)) {
+      throw new AppError("NO_FILE", "No file provided");
     }
 
-    const headersList = await headers();
-    const host = headersList.get("host");
-    const protocol = host?.startsWith("localhost") ? "http" : "https";
-    const redirectTo = `${protocol}://${host}/invite/accept`;
+    const staff = await requireAdmin();
+    const redirectTo = await inviteRedirectTo();
 
-    const serviceClient = createServiceClient();
-    const { data: invited, error } = await serviceClient.auth.admin.inviteUserByEmail(
-      email,
-      { redirectTo }
-    );
-    if (error) {
-      if (error.message.toLowerCase().includes("already")) {
-        throw new AppError("USER_ALREADY_EXISTS", error.message);
+    const rows = parseCsv(await file.text());
+    if (rows.length === 0) {
+      return ok({ invited: 0, skipped: [] });
+    }
+
+    const header = rows[0].map((h) => h.trim().toLowerCase());
+    const nameIdx = header.indexOf("full_name");
+    const emailIdx = header.indexOf("email");
+    const roleIdx = header.indexOf("role");
+
+    if (nameIdx === -1 || emailIdx === -1) {
+      throw new AppError("CSV_INVALID_HEADERS", "CSV must have full_name and email columns");
+    }
+
+    const skipped: SkipReason[] = [];
+    let invited = 0;
+
+    for (let i = 1; i < rows.length; i++) {
+      const rowNumber = i + 1; // 1-based, header is row 1
+      const cols = rows[i];
+      const fullName = cols[nameIdx]?.trim();
+      const email = cols[emailIdx]?.trim();
+      const roleRaw = (roleIdx !== -1 ? cols[roleIdx]?.trim() : undefined) ?? "";
+      const role = roleRaw.toLowerCase() || "staff";
+
+      if (!fullName || !email) {
+        skipped.push({ row: rowNumber, reason: "Missing full_name or email" });
+        continue;
       }
-      throw new AppError("DB_ERROR", error.message);
+      if (role !== "staff" && role !== "admin") {
+        skipped.push({
+          row: rowNumber,
+          reason: `Invalid role "${roleRaw}" (expected staff or admin)`,
+        });
+        continue;
+      }
+
+      try {
+        await inviteOneStaffMember(staff, redirectTo, {
+          email,
+          fullName,
+          role: role as "staff" | "admin",
+        });
+        invited++;
+      } catch (e) {
+        const reason = e instanceof AppError ? e.message : "Could not invite this address";
+        skipped.push({ row: rowNumber, reason });
+      }
     }
-    if (!invited.user) throw new AppError("INVITE_FAILED", "Invite failed");
 
-    const { error: staffError } = await serviceClient.from("staff").insert({
-      id: invited.user.id,
-      company_id: staff.company_id,
-      role: input.role,
-      full_name: fullName,
-    });
-    if (staffError) throw new AppError("DB_ERROR", staffError.message);
-
-    return ok({ email });
+    return ok({ invited, skipped });
   } catch (e) {
     return err(e);
   }

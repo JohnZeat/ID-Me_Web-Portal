@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { CsvUploadPanel } from "./csv-upload-panel";
 import { InviteStaffPanel } from "./invite-staff-panel";
+import { StaffCsvUploadPanel } from "./staff-csv-upload-panel";
 import { CompanySettingsPanel } from "./company-settings-panel";
 import { StaffList } from "./staff-list";
 import { listStaff, getCompanySettings, listCompanyDomains } from "./actions";
@@ -91,6 +92,8 @@ export default async function AdminPage() {
               </div>
 
               <InviteStaffPanel />
+
+              <StaffCsvUploadPanel />
 
               <CsvUploadPanel />
 
