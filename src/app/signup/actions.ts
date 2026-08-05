@@ -1,23 +1,25 @@
 "use server";
 
-import { headers } from "next/headers";
+import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { ok, err, AppError, type ActionResult } from "@/lib/action-result";
-import { createCheckoutSession } from "@/lib/stripe";
 
-// Company/staff rows are NOT created here -- only once Stripe confirms
-// payment via the checkout.session.completed webhook. This prevents an
-// abandoned checkout from leaving a paid-for-nothing company behind.
-// The auth account IS created up front (pre-confirmed) so login works
-// the moment the webhook finishes provisioning, without a separate
-// email-confirmation step blocking a paying customer.
-export async function startSignup(input: {
+const TRIAL_DAYS = 28;
+
+// Trial signup creates the company + admin staff row directly -- no
+// Stripe involved at all, no waiting on a webhook. Converting to a
+// paid subscription later ("Subscribe to Pro") is a separate flow
+// that reuses the Stripe Checkout + webhook pattern from before,
+// updating this same company row rather than creating a new one.
+//
+// Seat cap enforcement (trial limited to 1 seat) is a follow-up step,
+// not yet wired in here.
+export async function startTrialSignup(input: {
   companyName: string;
   fullName: string;
   email: string;
   password: string;
-  seats: number;
-}): Promise<ActionResult<{ checkoutUrl: string }>> {
+}): Promise<ActionResult<null>> {
   try {
     const companyName = input.companyName.trim();
     if (!companyName) throw new AppError("INVALID_COMPANY_NAME", "Company name can't be empty");
@@ -33,17 +35,14 @@ export async function startSignup(input: {
       throw new AppError("INVALID_PASSWORD", "Password must be at least 8 characters");
     }
 
-    const seats = Math.max(1, Math.trunc(input.seats) || 1);
-
     const serviceClient = createServiceClient();
 
     const { data: plan, error: planError } = await serviceClient
       .from("plans")
-      .select("id, stripe_price_id")
+      .select("id")
       .eq("name", "Per-Seat")
       .maybeSingle();
-
-    if (planError || !plan?.stripe_price_id) {
+    if (planError || !plan) {
       throw new AppError(
         "PLAN_NOT_CONFIGURED",
         "Billing isn't configured yet -- contact support"
@@ -66,33 +65,46 @@ export async function startSignup(input: {
     }
     if (!created.user) throw new AppError("SIGNUP_FAILED", "Could not create account");
 
-    const headersList = await headers();
-    const host = headersList.get("host");
-    const protocol = host?.startsWith("localhost") ? "http" : "https";
-    const origin = `${protocol}://${host}`;
+    const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString();
 
-    try {
-      const session = await createCheckoutSession({
-        priceId: plan.stripe_price_id,
-        quantity: seats,
-        customerEmail: email,
-        successUrl: `${origin}/signup/success`,
-        cancelUrl: `${origin}/signup`,
-        metadata: {
-          auth_user_id: created.user.id,
-          company_name: companyName,
-          admin_full_name: fullName,
-          plan_id: plan.id,
-        },
-      });
+    const { data: company, error: companyError } = await serviceClient
+      .from("companies")
+      .insert({
+        name: companyName,
+        plan_id: plan.id,
+        subscription_status: "trialing",
+        trial_ends_at: trialEndsAt,
+      })
+      .select("id")
+      .single();
 
-      return ok({ checkoutUrl: session.url });
-    } catch (checkoutError) {
-      // Roll back the auth account if Checkout Session creation fails,
-      // so this email isn't stuck "already registered" with no company.
+    if (companyError || !company) {
       await serviceClient.auth.admin.deleteUser(created.user.id);
-      throw checkoutError;
+      throw new AppError("DB_ERROR", companyError?.message ?? "Could not create company");
     }
+
+    const { error: staffError } = await serviceClient.from("staff").insert({
+      id: created.user.id,
+      company_id: company.id,
+      role: "admin",
+      full_name: fullName,
+    });
+
+    if (staffError) {
+      // Cleanup so this doesn't leave an orphaned, inaccessible company.
+      await serviceClient.from("companies").delete().eq("id", company.id);
+      await serviceClient.auth.admin.deleteUser(created.user.id);
+      throw new AppError("DB_ERROR", staffError.message);
+    }
+
+    // Sign them in immediately -- they just set a password, no reason
+    // to make them log in again right after signing up. If this
+    // hiccups the account/company still exist fine either way; they
+    // can just sign in manually.
+    const supabase = await createClient();
+    await supabase.auth.signInWithPassword({ email, password: input.password });
+
+    return ok(null);
   } catch (e) {
     return err(e);
   }
