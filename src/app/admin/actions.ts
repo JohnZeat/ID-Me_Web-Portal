@@ -6,6 +6,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { ok, err, AppError, type ActionResult } from "@/lib/action-result";
 import { DATE_FORMATS, type DateFormat } from "@/lib/format-date";
 import { generateApiKey } from "@/lib/api-key-auth";
+import { updateSubscriptionQuantity } from "@/lib/stripe";
 
 export type SkipReason = { row: number; reason: string };
 
@@ -98,6 +99,33 @@ async function logAuditEvent(
     await supabase
       .from("audit_log")
       .insert({ company_id: companyId, actor_id: actorId, action, details });
+  } catch {
+    // Swallowed intentionally -- see comment above.
+  }
+}
+
+// Best-effort, same reasoning as logAuditEvent: keeps a company's
+// Stripe subscription quantity matching their actual staff count.
+// No-ops for companies with no subscription yet (e.g. ones created
+// manually before self-serve signup existed, like the early test
+// companies).
+async function syncSeatCount(companyId: string): Promise<void> {
+  try {
+    const serviceClient = createServiceClient();
+    const { data: company } = await serviceClient
+      .from("companies")
+      .select("stripe_subscription_id")
+      .eq("id", companyId)
+      .maybeSingle();
+
+    if (!company?.stripe_subscription_id) return;
+
+    const { count } = await serviceClient
+      .from("staff")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", companyId);
+
+    await updateSubscriptionQuantity(company.stripe_subscription_id, count ?? 0);
   } catch {
     // Swallowed intentionally -- see comment above.
   }
@@ -363,6 +391,7 @@ export async function offboardStaff(staffId: string): Promise<ActionResult<null>
       email: targetEmail,
       role: target.role,
     });
+    await syncSeatCount(staff.company_id);
 
     return ok(null);
   } catch (e) {
@@ -430,6 +459,7 @@ async function inviteOneStaffMember(
     fullName,
     role: input.role,
   });
+  await syncSeatCount(staff.company_id);
 
   return { email };
 }
