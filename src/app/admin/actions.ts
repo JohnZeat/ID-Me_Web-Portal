@@ -418,6 +418,32 @@ async function inviteOneStaffMember(
   const domain = email.split("@")[1];
   if (!domain) throw new AppError("INVALID_EMAIL", "Invalid email address");
 
+  const serviceClient = createServiceClient();
+
+  // Trial companies are capped at 1 seat (the founding admin) --
+  // adding anyone else requires subscribing first. Checked before the
+  // domain lookup since "can this company add anyone at all right
+  // now" is the more fundamental gate.
+  const { data: company } = await serviceClient
+    .from("companies")
+    .select("subscription_status")
+    .eq("id", staff.company_id)
+    .maybeSingle();
+
+  if (company?.subscription_status === "trialing") {
+    const { count } = await serviceClient
+      .from("staff")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", staff.company_id);
+
+    if ((count ?? 0) >= 1) {
+      throw new AppError(
+        "TRIAL_SEAT_LIMIT",
+        "Your free trial is limited to 1 seat. Subscribe to add more staff."
+      );
+    }
+  }
+
   const supabase = await createClient();
   const { data: domainMatch } = await supabase
     .from("company_domains")
@@ -433,7 +459,6 @@ async function inviteOneStaffMember(
     );
   }
 
-  const serviceClient = createServiceClient();
   const { data: invited, error } = await serviceClient.auth.admin.inviteUserByEmail(
     email,
     { redirectTo }
