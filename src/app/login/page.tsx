@@ -18,7 +18,7 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -29,7 +29,13 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dashboard");
+    const { data: platformAdmin } = await supabase
+      .from("platform_admins")
+      .select("id")
+      .eq("id", data.user.id)
+      .maybeSingle();
+
+    router.push(platformAdmin ? "/platform" : "/dashboard");
     router.refresh();
   }
 
