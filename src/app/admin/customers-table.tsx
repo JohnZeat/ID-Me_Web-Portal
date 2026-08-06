@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { listCustomers, type CustomerEntry } from "./actions";
 import { ErrorGuidance } from "@/components/error-guidance";
+import { Spinner } from "@/components/spinner";
 import { formatDob, type DateFormat } from "@/lib/format-date";
 
 const PAGE_SIZE = 20;
@@ -12,13 +13,16 @@ export function CustomersTable({ dateFormat }: { dateFormat: DateFormat }) {
   const [page, setPage] = useState(1);
   const [customers, setCustomers] = useState<CustomerEntry[]>([]);
   const [total, setTotal] = useState(0);
-  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const requestId = useRef(0);
+  const isFirstLoad = useRef(true);
 
   useEffect(() => {
     const id = ++requestId.current;
-    const timeout = setTimeout(async () => {
+    setLoading(true);
+
+    const runFetch = async () => {
       const result = await listCustomers({ search, page, pageSize: PAGE_SIZE });
       if (id !== requestId.current) return; // superseded by a newer request
       if (result.ok) {
@@ -28,8 +32,19 @@ export function CustomersTable({ dateFormat }: { dateFormat: DateFormat }) {
       } else {
         setError({ code: result.code, message: result.message });
       }
-      setLoaded(true);
-    }, 300);
+      setLoading(false);
+    };
+
+    // Debounce only applies to subsequent searches (typing) -- the very
+    // first fetch, when the tab is first shown, should happen right
+    // away rather than after an artificial delay.
+    if (isFirstLoad.current) {
+      isFirstLoad.current = false;
+      runFetch();
+      return;
+    }
+
+    const timeout = setTimeout(runFetch, 300);
     return () => clearTimeout(timeout);
   }, [search, page]);
 
@@ -75,22 +90,29 @@ export function CustomersTable({ dateFormat }: { dateFormat: DateFormat }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {loaded && customers.length === 0 && (
+            {loading ? (
+              <tr>
+                <td colSpan={3} className="px-4 py-6 text-center">
+                  <Spinner className="mx-auto" />
+                </td>
+              </tr>
+            ) : customers.length === 0 ? (
               <tr>
                 <td colSpan={3} className="px-4 py-3 text-center text-gray-500">
                   No customers found.
                 </td>
               </tr>
+            ) : (
+              customers.map((c) => (
+                <tr key={c.id}>
+                  <td className="px-4 py-2 text-gray-900">{c.fullName}</td>
+                  <td className="px-4 py-2 text-gray-600">
+                    {formatDob(c.dob, dateFormat)}
+                  </td>
+                  <td className="px-4 py-2 text-gray-600">{c.mobileNumber}</td>
+                </tr>
+              ))
             )}
-            {customers.map((c) => (
-              <tr key={c.id}>
-                <td className="px-4 py-2 text-gray-900">{c.fullName}</td>
-                <td className="px-4 py-2 text-gray-600">
-                  {formatDob(c.dob, dateFormat)}
-                </td>
-                <td className="px-4 py-2 text-gray-600">{c.mobileNumber}</td>
-              </tr>
-            ))}
           </tbody>
         </table>
       </div>

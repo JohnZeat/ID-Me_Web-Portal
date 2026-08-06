@@ -46,7 +46,17 @@ export function AdminTabs({
           </button>
         ))}
       </nav>
-      <div className="min-w-0 flex-1 space-y-8">{content[active]}</div>
+      <div className="min-w-0 flex-1">
+        {TABS.map((tab) => (
+          // Kept mounted (CSS-hidden) rather than conditionally rendered,
+          // so switching tabs doesn't unmount/remount CustomersTable and
+          // AuditLogTable -- those self-fetch on mount, so remounting
+          // them every switch meant refetching from scratch every time.
+          <div key={tab} className={tab === active ? "space-y-8" : "hidden"}>
+            {content[tab]}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

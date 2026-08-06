@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { listAuditLog, type AuditLogEntry } from "./actions";
 import { ErrorGuidance } from "@/components/error-guidance";
+import { Spinner } from "@/components/spinner";
 
 const PAGE_SIZE = 20;
 
@@ -52,12 +53,13 @@ export function AuditLogTable() {
   const [page, setPage] = useState(1);
   const [entries, setEntries] = useState<AuditLogEntry[]>([]);
   const [total, setTotal] = useState(0);
-  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const requestId = useRef(0);
 
   useEffect(() => {
     const id = ++requestId.current;
+    setLoading(true);
     listAuditLog({ page, pageSize: PAGE_SIZE }).then((result) => {
       if (id !== requestId.current) return;
       if (result.ok) {
@@ -67,7 +69,7 @@ export function AuditLogTable() {
       } else {
         setError({ code: result.code, message: result.message });
       }
-      setLoaded(true);
+      setLoading(false);
     });
   }, [page]);
 
@@ -95,29 +97,36 @@ export function AuditLogTable() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {loaded && entries.length === 0 && (
+            {loading ? (
+              <tr>
+                <td colSpan={4} className="px-4 py-6 text-center">
+                  <Spinner className="mx-auto" />
+                </td>
+              </tr>
+            ) : entries.length === 0 ? (
               <tr>
                 <td colSpan={4} className="px-4 py-3 text-center text-gray-500">
                   No audit events yet.
                 </td>
               </tr>
+            ) : (
+              entries.map((e) => (
+                <tr key={e.id}>
+                  <td className="px-4 py-2 whitespace-nowrap text-gray-500">
+                    {new Date(e.createdAt).toLocaleString()}
+                  </td>
+                  <td className="px-4 py-2 whitespace-nowrap text-gray-900">
+                    {ACTION_LABELS[e.action] ?? e.action}
+                  </td>
+                  <td className="px-4 py-2 text-gray-600">
+                    {formatDetails(e.action, e.details)}
+                  </td>
+                  <td className="px-4 py-2 whitespace-nowrap text-gray-500">
+                    {e.actorEmail ?? "—"}
+                  </td>
+                </tr>
+              ))
             )}
-            {entries.map((e) => (
-              <tr key={e.id}>
-                <td className="px-4 py-2 whitespace-nowrap text-gray-500">
-                  {new Date(e.createdAt).toLocaleString()}
-                </td>
-                <td className="px-4 py-2 whitespace-nowrap text-gray-900">
-                  {ACTION_LABELS[e.action] ?? e.action}
-                </td>
-                <td className="px-4 py-2 text-gray-600">
-                  {formatDetails(e.action, e.details)}
-                </td>
-                <td className="px-4 py-2 whitespace-nowrap text-gray-500">
-                  {e.actorEmail ?? "—"}
-                </td>
-              </tr>
-            ))}
           </tbody>
         </table>
       </div>

@@ -9,6 +9,7 @@ import {
   type GeneratedCode,
 } from "./actions";
 import { ErrorGuidance } from "@/components/error-guidance";
+import { Spinner } from "@/components/spinner";
 import { formatDob, type DateFormat } from "@/lib/format-date";
 
 function useCountdown(expiresAt: string | null) {
@@ -168,7 +169,13 @@ export function CodeGeneratorPanel({ dateFormat }: { dateFormat: DateFormat }) {
 
       {error && <ErrorGuidance code={error.code} fallback={error.message} />}
 
-      {searched && !selected && (
+      {!selected && searching && (
+        <div className="flex justify-center rounded-md border border-gray-200 bg-white p-6">
+          <Spinner />
+        </div>
+      )}
+
+      {!selected && !searching && searched && (
         <div className="rounded-md border border-gray-200 bg-white">
           {results.length === 0 ? (
             <div className="p-4 text-sm text-gray-600">
