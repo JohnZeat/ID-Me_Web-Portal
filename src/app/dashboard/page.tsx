@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { SignOutButton } from "./sign-out-button";
+import { SignOutButton } from "@/components/sign-out-button";
 import { CodeGeneratorPanel } from "./code-generator";
 import type { DateFormat } from "@/lib/format-date";
-import { isTrialExpired, trialDaysRemaining } from "@/lib/subscription";
+import { isSuspended, isTrialExpired, trialDaysRemaining } from "@/lib/subscription";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -23,21 +23,26 @@ export default async function DashboardPage() {
     .maybeSingle();
 
   let dateFormat: DateFormat = "DD/MM/YYYY";
+  let suspended = false;
   let expired = false;
   let daysLeft: number | null = null;
 
   if (staff) {
     const { data: company } = await supabase
       .from("companies")
-      .select("date_format, subscription_status, trial_ends_at")
+      .select("date_format, subscription_status, trial_ends_at, suspended_at")
       .eq("id", staff.company_id)
       .maybeSingle();
     if (company) {
       dateFormat = company.date_format;
+      suspended = isSuspended(company);
       expired = isTrialExpired(company);
       daysLeft = trialDaysRemaining(company);
     }
   }
+
+  const locked = suspended || expired;
+  const isAdmin = staff?.role === "admin";
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10">
@@ -47,7 +52,7 @@ export default async function DashboardPage() {
             Staff Dashboard
           </h1>
           <div className="flex items-center gap-4">
-            {staff?.role === "admin" && (
+            {isAdmin && (
               <Link
                 href="/admin"
                 className="text-sm font-medium text-gray-500 hover:text-gray-900"
@@ -73,16 +78,31 @@ export default async function DashboardPage() {
                 </p>
               </div>
             </>
-          ) : expired ? (
+          ) : locked ? (
             <>
               <p className="mb-6 text-lg font-medium text-gray-900">
                 Hi {staff.full_name ?? user.email}
               </p>
               <div className="rounded-md border border-dashed border-amber-300 bg-amber-50 p-6 text-center">
-                <p className="text-sm text-amber-800">
-                  Your free trial has ended. Subscribing is coming soon — for
-                  now, please contact support to continue.
-                </p>
+                {suspended ? (
+                  <p className="text-sm text-amber-800">
+                    Your company&apos;s account has been suspended. Contact
+                    support for details.
+                  </p>
+                ) : isAdmin ? (
+                  <p className="text-sm text-amber-800">
+                    Your free trial has ended.{" "}
+                    <Link href="/admin" className="font-medium underline">
+                      Go to Admin
+                    </Link>{" "}
+                    to subscribe and continue.
+                  </p>
+                ) : (
+                  <p className="text-sm text-amber-800">
+                    Your company&apos;s free trial has ended. Contact your
+                    company admin to subscribe.
+                  </p>
+                )}
               </div>
             </>
           ) : (

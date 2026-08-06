@@ -7,7 +7,7 @@ import { ok, err, AppError, type ActionResult } from "@/lib/action-result";
 import { DATE_FORMATS, type DateFormat } from "@/lib/format-date";
 import { generateApiKey } from "@/lib/api-key-auth";
 import { createCheckoutSession, updateSubscriptionQuantity } from "@/lib/stripe";
-import { isTrialExpired } from "@/lib/subscription";
+import { isTrialExpired, isSuspended } from "@/lib/subscription";
 
 export type SkipReason = { row: number; reason: string };
 
@@ -86,10 +86,16 @@ async function requireAdmin() {
 
   const { data: company } = await supabase
     .from("companies")
-    .select("subscription_status, trial_ends_at")
+    .select("subscription_status, trial_ends_at, suspended_at")
     .eq("id", staff.company_id)
     .maybeSingle();
 
+  if (company && isSuspended(company)) {
+    throw new AppError(
+      "ACCOUNT_SUSPENDED",
+      "Your company's account has been suspended. Contact support for details."
+    );
+  }
   if (company && isTrialExpired(company)) {
     throw new AppError(
       "TRIAL_EXPIRED",
@@ -965,6 +971,21 @@ export async function startProSubscription(
     if (staffRow.role !== "admin") throw new AppError("ADMIN_REQUIRED", "Admin role required");
 
     const serviceClient = createServiceClient();
+
+    // Suspension IS still enforced here (unlike trial expiry, which
+    // this action deliberately bypasses) -- subscribing doesn't undo a
+    // platform-admin-imposed suspension.
+    const { data: company } = await serviceClient
+      .from("companies")
+      .select("suspended_at")
+      .eq("id", staffRow.company_id)
+      .maybeSingle();
+    if (company && isSuspended(company)) {
+      throw new AppError(
+        "ACCOUNT_SUSPENDED",
+        "Your company's account has been suspended. Contact support for details."
+      );
+    }
 
     const { data: plan } = await serviceClient
       .from("plans")

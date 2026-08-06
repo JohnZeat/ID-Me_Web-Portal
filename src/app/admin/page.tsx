@@ -18,7 +18,7 @@ import {
   listApiKeys,
 } from "./actions";
 import { getErrorGuidanceForStaff } from "@/lib/error-guidance";
-import { isTrialExpired } from "@/lib/subscription";
+import { isSuspended, isTrialExpired } from "@/lib/subscription";
 
 function ErrorBox({
   guidanceHtml,
@@ -58,25 +58,28 @@ export default async function AdminPage() {
     .eq("id", user.id)
     .maybeSingle();
 
+  let suspended = false;
   let expired = false;
   let isTrialing = false;
   if (staff) {
     const { data: company } = await supabase
       .from("companies")
-      .select("subscription_status, trial_ends_at")
+      .select("subscription_status, trial_ends_at, suspended_at")
       .eq("id", staff.company_id)
       .maybeSingle();
     if (company) {
+      suspended = isSuspended(company);
       expired = isTrialExpired(company);
       isTrialing = company.subscription_status === "trialing";
     }
   }
+  const locked = suspended || expired;
 
   // requireAdmin() (used by every action below) also enforces this, but
   // checking here too avoids firing off several doomed-to-fail queries
   // and lets the whole tab area collapse into one clear message instead
   // of the same error repeated in each tab.
-  const isAdmin = !!staff && staff.role === "admin" && !expired;
+  const isAdmin = !!staff && staff.role === "admin" && !locked;
 
   const staffListResult = isAdmin ? await listStaff() : null;
   const staffListGuidance =
@@ -125,6 +128,11 @@ export default async function AdminPage() {
           ) : staff.role !== "admin" ? (
             <p className="text-sm text-amber-800">
               This area is restricted to company admins.
+            </p>
+          ) : suspended ? (
+            <p className="text-sm text-amber-800">
+              Your company&apos;s account has been suspended. Contact support
+              for details.
             </p>
           ) : expired ? (
             <div className="space-y-4">

@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { ok, err, AppError, type ActionResult } from "@/lib/action-result";
-import { isTrialExpired } from "@/lib/subscription";
+import { isTrialExpired, isSuspended } from "@/lib/subscription";
 
 export type CustomerSearchResult = {
   id: string;
@@ -108,9 +108,15 @@ export async function generateCode(
 
     const { data: company } = await supabase
       .from("companies")
-      .select("subscription_status, trial_ends_at")
+      .select("subscription_status, trial_ends_at, suspended_at")
       .eq("id", staff.company_id)
       .maybeSingle();
+    if (company && isSuspended(company)) {
+      throw new AppError(
+        "ACCOUNT_SUSPENDED",
+        "Your company's account has been suspended. Contact support for details."
+      );
+    }
     if (company && isTrialExpired(company)) {
       throw new AppError(
         "TRIAL_EXPIRED",
