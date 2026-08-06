@@ -21,12 +21,14 @@ function mapStripeStatus(status: string): SubscriptionStatus {
 }
 
 /**
- * Stripe webhook. Company/staff provisioning happens ONLY here, on
- * checkout.session.completed -- not at Checkout Session creation --
- * so an abandoned checkout never leaves a half-created company behind.
- * Signature verified manually (HMAC via node:crypto) rather than via
- * the Stripe SDK, since there's no way to safely add an npm dependency
- * here (no local Node/npm to regenerate the lockfile).
+ * Stripe webhook. checkout.session.completed here always means an
+ * existing trialing company converting to paid ("Subscribe to Pro") --
+ * signup itself no longer goes through Stripe (companies start on a
+ * free trial, created directly), so this only ever updates a company
+ * row, never creates one. Signature verified manually (HMAC via
+ * node:crypto) rather than via the Stripe SDK, since there's no way to
+ * safely add an npm dependency here (no local Node/npm to regenerate
+ * the lockfile).
  */
 export async function POST(request: Request) {
   const payload = await request.text();
@@ -49,33 +51,17 @@ export async function POST(request: Request) {
 
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
-    const metadata = session.metadata ?? {};
-    const authUserId = metadata.auth_user_id as string | undefined;
-    const companyName = metadata.company_name as string | undefined;
-    const adminFullName = metadata.admin_full_name as string | undefined;
-    const planId = metadata.plan_id as string | undefined;
+    const companyId = session.metadata?.company_id as string | undefined;
 
-    if (authUserId && companyName && planId) {
-      const { data: company, error: companyError } = await supabase
+    if (companyId) {
+      await supabase
         .from("companies")
-        .insert({
-          name: companyName,
-          plan_id: planId,
+        .update({
           subscription_status: "active",
           stripe_customer_id: session.customer,
           stripe_subscription_id: session.subscription,
         })
-        .select("id")
-        .single();
-
-      if (!companyError && company) {
-        await supabase.from("staff").insert({
-          id: authUserId,
-          company_id: company.id,
-          role: "admin",
-          full_name: adminFullName ?? null,
-        });
-      }
+        .eq("id", companyId);
     }
   }
 

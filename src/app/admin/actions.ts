@@ -6,7 +6,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { ok, err, AppError, type ActionResult } from "@/lib/action-result";
 import { DATE_FORMATS, type DateFormat } from "@/lib/format-date";
 import { generateApiKey } from "@/lib/api-key-auth";
-import { updateSubscriptionQuantity } from "@/lib/stripe";
+import { createCheckoutSession, updateSubscriptionQuantity } from "@/lib/stripe";
 import { isTrialExpired } from "@/lib/subscription";
 
 export type SkipReason = { row: number; reason: string };
@@ -935,6 +935,76 @@ export async function listAuditLog(input: {
     );
 
     return ok({ entries, total: count ?? 0, page, pageSize });
+  } catch (e) {
+    return err(e);
+  }
+}
+
+// Deliberately does NOT use requireAdmin() -- that throws once a
+// trial has expired, which is exactly the state this action needs to
+// work from (subscribing is how a company escapes the expired lock).
+// Does its own lighter-weight signed-in-admin check instead.
+export async function startProSubscription(
+  seats: number
+): Promise<ActionResult<{ checkoutUrl: string }>> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new AppError("NOT_SIGNED_IN", "Not signed in");
+
+    const { data: staffRow } = await supabase
+      .from("staff")
+      .select("company_id, role")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (!staffRow) {
+      throw new AppError("NOT_PROVISIONED", "Your account isn't provisioned for a company");
+    }
+    if (staffRow.role !== "admin") throw new AppError("ADMIN_REQUIRED", "Admin role required");
+
+    const serviceClient = createServiceClient();
+
+    const { data: plan } = await serviceClient
+      .from("plans")
+      .select("stripe_price_id")
+      .eq("name", "Per-Seat")
+      .maybeSingle();
+    if (!plan?.stripe_price_id) {
+      throw new AppError(
+        "PLAN_NOT_CONFIGURED",
+        "Billing isn't configured yet -- contact support"
+      );
+    }
+
+    // Never subscribe for fewer seats than the company actually has.
+    const { count: staffCount } = await serviceClient
+      .from("staff")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", staffRow.company_id);
+
+    const seatCount = Math.max(staffCount ?? 1, Math.trunc(seats) || 1);
+
+    const { data: authUser } = await serviceClient.auth.admin.getUserById(user.id);
+
+    const headersList = await headers();
+    const host = headersList.get("host");
+    const protocol = host?.startsWith("localhost") ? "http" : "https";
+    const origin = `${protocol}://${host}`;
+
+    const session = await createCheckoutSession({
+      priceId: plan.stripe_price_id,
+      quantity: seatCount,
+      customerEmail: authUser.user?.email ?? "",
+      successUrl: `${origin}/signup/success`,
+      cancelUrl: `${origin}/admin`,
+      metadata: {
+        company_id: staffRow.company_id,
+      },
+    });
+
+    return ok({ checkoutUrl: session.url });
   } catch (e) {
     return err(e);
   }

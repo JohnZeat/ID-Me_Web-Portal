@@ -10,6 +10,7 @@ import { ApiKeyPanel } from "./api-key-panel";
 import { CustomersTable } from "./customers-table";
 import { AuditLogTable } from "./audit-log-table";
 import { AdminTabs } from "./admin-tabs";
+import { SubscribeToProPanel } from "./subscribe-to-pro-panel";
 import {
   listStaff,
   getCompanySettings,
@@ -58,13 +59,17 @@ export default async function AdminPage() {
     .maybeSingle();
 
   let expired = false;
+  let isTrialing = false;
   if (staff) {
     const { data: company } = await supabase
       .from("companies")
       .select("subscription_status, trial_ends_at")
       .eq("id", staff.company_id)
       .maybeSingle();
-    if (company) expired = isTrialExpired(company);
+    if (company) {
+      expired = isTrialExpired(company);
+      isTrialing = company.subscription_status === "trialing";
+    }
   }
 
   // requireAdmin() (used by every action below) also enforces this, but
@@ -122,10 +127,12 @@ export default async function AdminPage() {
               This area is restricted to company admins.
             </p>
           ) : expired ? (
-            <p className="text-sm text-amber-800">
-              Your free trial has ended. Subscribing is coming soon — for
-              now, please contact support to continue.
-            </p>
+            <div className="space-y-4">
+              <p className="text-sm text-amber-800">
+                Your free trial has ended. Subscribe below to continue.
+              </p>
+              <SubscribeToProPanel />
+            </div>
           ) : (
             <AdminTabs
               staff={
@@ -181,6 +188,7 @@ export default async function AdminPage() {
                       )
                     )}
                   </div>
+                  {isTrialing && <SubscribeToProPanel />}
                 </>
               }
               api={
