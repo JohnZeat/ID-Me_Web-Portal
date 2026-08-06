@@ -17,6 +17,7 @@ import {
   listApiKeys,
 } from "./actions";
 import { getErrorGuidanceForStaff } from "@/lib/error-guidance";
+import { isTrialExpired } from "@/lib/subscription";
 
 function ErrorBox({
   guidanceHtml,
@@ -56,7 +57,21 @@ export default async function AdminPage() {
     .eq("id", user.id)
     .maybeSingle();
 
-  const isAdmin = !!staff && staff.role === "admin";
+  let expired = false;
+  if (staff) {
+    const { data: company } = await supabase
+      .from("companies")
+      .select("subscription_status, trial_ends_at")
+      .eq("id", staff.company_id)
+      .maybeSingle();
+    if (company) expired = isTrialExpired(company);
+  }
+
+  // requireAdmin() (used by every action below) also enforces this, but
+  // checking here too avoids firing off several doomed-to-fail queries
+  // and lets the whole tab area collapse into one clear message instead
+  // of the same error repeated in each tab.
+  const isAdmin = !!staff && staff.role === "admin" && !expired;
 
   const staffListResult = isAdmin ? await listStaff() : null;
   const staffListGuidance =
@@ -105,6 +120,11 @@ export default async function AdminPage() {
           ) : staff.role !== "admin" ? (
             <p className="text-sm text-amber-800">
               This area is restricted to company admins.
+            </p>
+          ) : expired ? (
+            <p className="text-sm text-amber-800">
+              Your free trial has ended. Subscribing is coming soon — for
+              now, please contact support to continue.
             </p>
           ) : (
             <AdminTabs

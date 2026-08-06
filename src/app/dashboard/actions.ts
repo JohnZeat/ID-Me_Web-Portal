@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { ok, err, AppError, type ActionResult } from "@/lib/action-result";
+import { isTrialExpired } from "@/lib/subscription";
 
 export type CustomerSearchResult = {
   id: string;
@@ -91,6 +92,31 @@ export async function generateCode(
 ): Promise<ActionResult<GeneratedCode>> {
   try {
     const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) throw new AppError("NOT_SIGNED_IN", "Not signed in");
+
+    const { data: staff } = await supabase
+      .from("staff")
+      .select("company_id")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (!staff) {
+      throw new AppError("NOT_PROVISIONED", "Your account isn't provisioned for a company");
+    }
+
+    const { data: company } = await supabase
+      .from("companies")
+      .select("subscription_status, trial_ends_at")
+      .eq("id", staff.company_id)
+      .maybeSingle();
+    if (company && isTrialExpired(company)) {
+      throw new AppError(
+        "TRIAL_EXPIRED",
+        "Your free trial has ended. Subscribe to continue generating codes."
+      );
+    }
 
     const { data, error } = await supabase.rpc("generate_customer_code", {
       p_customer_id: customerId,

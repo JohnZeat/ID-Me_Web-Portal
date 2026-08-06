@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "./sign-out-button";
 import { CodeGeneratorPanel } from "./code-generator";
 import type { DateFormat } from "@/lib/format-date";
+import { isTrialExpired, trialDaysRemaining } from "@/lib/subscription";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -22,13 +23,20 @@ export default async function DashboardPage() {
     .maybeSingle();
 
   let dateFormat: DateFormat = "DD/MM/YYYY";
+  let expired = false;
+  let daysLeft: number | null = null;
+
   if (staff) {
     const { data: company } = await supabase
       .from("companies")
-      .select("date_format")
+      .select("date_format, subscription_status, trial_ends_at")
       .eq("id", staff.company_id)
       .maybeSingle();
-    if (company) dateFormat = company.date_format;
+    if (company) {
+      dateFormat = company.date_format;
+      expired = isTrialExpired(company);
+      daysLeft = trialDaysRemaining(company);
+    }
   }
 
   return (
@@ -65,11 +73,33 @@ export default async function DashboardPage() {
                 </p>
               </div>
             </>
-          ) : (
+          ) : expired ? (
             <>
               <p className="mb-6 text-lg font-medium text-gray-900">
+                Hi {staff.full_name ?? user.email}
+              </p>
+              <div className="rounded-md border border-dashed border-amber-300 bg-amber-50 p-6 text-center">
+                <p className="text-sm text-amber-800">
+                  Your free trial has ended. Subscribing is coming soon — for
+                  now, please contact support to continue.
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <p
+                className={`text-lg font-medium text-gray-900 ${
+                  daysLeft !== null ? "mb-1" : "mb-6"
+                }`}
+              >
                 Hi {staff.full_name ?? user.email}, what would you like to do?
               </p>
+              {daysLeft !== null && (
+                <p className="mb-5 text-sm text-gray-500">
+                  {daysLeft} day{daysLeft === 1 ? "" : "s"} left in your free
+                  trial.
+                </p>
+              )}
               <CodeGeneratorPanel dateFormat={dateFormat} />
             </>
           )}

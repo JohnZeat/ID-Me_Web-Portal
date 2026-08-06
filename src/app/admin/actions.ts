@@ -7,6 +7,7 @@ import { ok, err, AppError, type ActionResult } from "@/lib/action-result";
 import { DATE_FORMATS, type DateFormat } from "@/lib/format-date";
 import { generateApiKey } from "@/lib/api-key-auth";
 import { updateSubscriptionQuantity } from "@/lib/stripe";
+import { isTrialExpired } from "@/lib/subscription";
 
 export type SkipReason = { row: number; reason: string };
 
@@ -82,6 +83,19 @@ async function requireAdmin() {
     throw new AppError("NOT_PROVISIONED", "Your account isn't provisioned for a company");
   }
   if (staff.role !== "admin") throw new AppError("ADMIN_REQUIRED", "Admin role required");
+
+  const { data: company } = await supabase
+    .from("companies")
+    .select("subscription_status, trial_ends_at")
+    .eq("id", staff.company_id)
+    .maybeSingle();
+
+  if (company && isTrialExpired(company)) {
+    throw new AppError(
+      "TRIAL_EXPIRED",
+      "Your free trial has ended. Subscribe to continue using the admin area."
+    );
+  }
 
   return staff;
 }
