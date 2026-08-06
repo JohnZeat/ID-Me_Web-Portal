@@ -6,7 +6,11 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { ok, err, AppError, type ActionResult } from "@/lib/action-result";
 import { DATE_FORMATS, type DateFormat } from "@/lib/format-date";
 import { generateApiKey } from "@/lib/api-key-auth";
-import { createCheckoutSession, updateSubscriptionQuantity } from "@/lib/stripe";
+import {
+  createBillingPortalSession,
+  createCheckoutSession,
+  updateSubscriptionQuantity,
+} from "@/lib/stripe";
 import { isTrialExpired, isSuspended } from "@/lib/subscription";
 
 export type SkipReason = { row: number; reason: string };
@@ -1026,6 +1030,43 @@ export async function startProSubscription(
     });
 
     return ok({ checkoutUrl: session.url });
+  } catch (e) {
+    return err(e);
+  }
+}
+
+// Uses requireAdmin() (unlike startProSubscription) -- a suspended or
+// trial-expired company has nothing to manage here anyway (no Stripe
+// customer exists yet during a trial), so the normal lock applies.
+export async function openBillingPortal(): Promise<ActionResult<{ portalUrl: string }>> {
+  try {
+    const staff = await requireAdmin();
+
+    const serviceClient = createServiceClient();
+    const { data: company } = await serviceClient
+      .from("companies")
+      .select("stripe_customer_id")
+      .eq("id", staff.company_id)
+      .maybeSingle();
+
+    if (!company?.stripe_customer_id) {
+      throw new AppError(
+        "NO_BILLING_ACCOUNT",
+        "You haven't subscribed yet -- there's no billing account to manage"
+      );
+    }
+
+    const headersList = await headers();
+    const host = headersList.get("host");
+    const protocol = host?.startsWith("localhost") ? "http" : "https";
+    const returnUrl = `${protocol}://${host}/admin`;
+
+    const session = await createBillingPortalSession({
+      customerId: company.stripe_customer_id,
+      returnUrl,
+    });
+
+    return ok({ portalUrl: session.url });
   } catch (e) {
     return err(e);
   }

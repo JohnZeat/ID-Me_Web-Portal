@@ -11,6 +11,7 @@ import { CustomersTable } from "./customers-table";
 import { AuditLogTable } from "./audit-log-table";
 import { AdminTabs } from "./admin-tabs";
 import { SubscribeToProPanel } from "./subscribe-to-pro-panel";
+import { BillingPortalButton } from "./billing-portal-button";
 import {
   listStaff,
   getCompanySettings,
@@ -61,16 +62,18 @@ export default async function AdminPage() {
   let suspended = false;
   let expired = false;
   let isTrialing = false;
+  let hasStripeCustomer = false;
   if (staff) {
     const { data: company } = await supabase
       .from("companies")
-      .select("subscription_status, trial_ends_at, suspended_at")
+      .select("subscription_status, trial_ends_at, suspended_at, stripe_customer_id")
       .eq("id", staff.company_id)
       .maybeSingle();
     if (company) {
       suspended = isSuspended(company);
       expired = isTrialExpired(company);
       isTrialing = company.subscription_status === "trialing";
+      hasStripeCustomer = !!company.stripe_customer_id;
     }
   }
   const locked = suspended || expired;
@@ -197,6 +200,7 @@ export default async function AdminPage() {
                     )}
                   </div>
                   {isTrialing && <SubscribeToProPanel />}
+                  {hasStripeCustomer && <BillingPortalButton />}
                 </>
               }
               api={

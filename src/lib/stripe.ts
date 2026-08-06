@@ -71,6 +71,18 @@ export async function createCheckoutSession(input: {
   });
 }
 
+// Stripe's own hosted UI for invoice history, payment method updates,
+// and cancellation -- no reason to build that ourselves.
+export async function createBillingPortalSession(input: {
+  customerId: string;
+  returnUrl: string;
+}): Promise<{ url: string }> {
+  return stripeRequest("POST", "/billing_portal/sessions", {
+    customer: input.customerId,
+    return_url: input.returnUrl,
+  });
+}
+
 // Volume-priced subscriptions have exactly one item; updates its
 // quantity to match the company's actual current staff count.
 export async function updateSubscriptionQuantity(
