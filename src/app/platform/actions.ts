@@ -61,7 +61,13 @@ export async function listSubscribers(): Promise<ActionResult<SubscriberEntry[]>
           .select("id", { count: "exact", head: true })
           .eq("company_id", row.id);
 
-        const plan = row.plans as { name: string } | null;
+        // TypeScript infers this embedded relation as an array (no
+        // generated Database types to tell it the FK is many-to-one),
+        // but PostgREST actually returns a single object at runtime for
+        // a to-one relation -- handle both shapes rather than trust
+        // either blindly, since the inference has been unreliable.
+        const rawPlan = row.plans as { name: string } | { name: string }[] | null;
+        const plan = Array.isArray(rawPlan) ? (rawPlan[0] ?? null) : rawPlan;
 
         return {
           id: row.id,
