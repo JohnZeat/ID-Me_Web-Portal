@@ -9,9 +9,10 @@ import { generateApiKey } from "@/lib/api-key-auth";
 import {
   createBillingPortalSession,
   createCheckoutSession,
+  setSubscriptionCancelAtPeriodEnd,
   updateSubscriptionQuantity,
 } from "@/lib/stripe";
-import { isTrialExpired, isSuspended } from "@/lib/subscription";
+import { isTrialExpired, isSuspended, trialDaysRemaining } from "@/lib/subscription";
 
 export type SkipReason = { row: number; reason: string };
 
@@ -1067,6 +1068,136 @@ export async function openBillingPortal(): Promise<ActionResult<{ portalUrl: str
     });
 
     return ok({ portalUrl: session.url });
+  } catch (e) {
+    return err(e);
+  }
+}
+
+export type SubscriptionSummary = {
+  planName: string;
+  status: string;
+  seatsInUse: number;
+  pricePerSeatCents: number | null;
+  estimatedMonthlyCents: number | null;
+  tiers: { minSeats: number; maxSeats: number | null; pricePerSeatCents: number }[];
+  trialDaysLeft: number | null;
+  hasStripeSubscription: boolean;
+  cancelAtPeriodEnd: boolean;
+};
+
+export async function getSubscriptionSummary(): Promise<ActionResult<SubscriptionSummary>> {
+  try {
+    const staff = await requireAdmin();
+    const serviceClient = createServiceClient();
+
+    const { data: company } = await serviceClient
+      .from("companies")
+      .select(
+        "subscription_status, trial_ends_at, stripe_subscription_id, cancel_at_period_end, plan_id, plans(name)"
+      )
+      .eq("id", staff.company_id)
+      .maybeSingle();
+    if (!company) {
+      throw new AppError("COMPANY_NOT_FOUND", "Company not found");
+    }
+
+    const rawPlan = company.plans as { name: string } | { name: string }[] | null;
+    const plan = Array.isArray(rawPlan) ? (rawPlan[0] ?? null) : rawPlan;
+
+    const { data: tierRows } = await serviceClient
+      .from("plan_seat_tiers")
+      .select("min_seats, max_seats, price_per_seat_cents")
+      .eq("plan_id", company.plan_id)
+      .order("min_seats", { ascending: true });
+    const tiers = (tierRows ?? []).map((t) => ({
+      minSeats: t.min_seats,
+      maxSeats: t.max_seats,
+      pricePerSeatCents: t.price_per_seat_cents,
+    }));
+
+    const { count } = await serviceClient
+      .from("staff")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", staff.company_id);
+    const seatsInUse = count ?? 0;
+
+    const currentTier = tiers.find(
+      (t) => seatsInUse >= t.minSeats && (t.maxSeats === null || seatsInUse <= t.maxSeats)
+    );
+
+    return ok({
+      planName: plan?.name ?? "Free Trial",
+      status: company.subscription_status,
+      seatsInUse,
+      pricePerSeatCents: currentTier?.pricePerSeatCents ?? null,
+      estimatedMonthlyCents: currentTier ? currentTier.pricePerSeatCents * seatsInUse : null,
+      tiers,
+      trialDaysLeft: trialDaysRemaining(company),
+      hasStripeSubscription: !!company.stripe_subscription_id,
+      cancelAtPeriodEnd: company.cancel_at_period_end,
+    });
+  } catch (e) {
+    return err(e);
+  }
+}
+
+// Cancels at the end of the current billing period (not immediately) so
+// the company keeps access through what they've already paid for. The
+// webhook (customer.subscription.updated) is the source of truth for
+// when Stripe actually finalizes this; this just schedules it.
+export async function cancelSubscription(): Promise<ActionResult<null>> {
+  try {
+    const staff = await requireAdmin();
+    const serviceClient = createServiceClient();
+
+    const { data: company } = await serviceClient
+      .from("companies")
+      .select("stripe_subscription_id")
+      .eq("id", staff.company_id)
+      .maybeSingle();
+    if (!company?.stripe_subscription_id) {
+      throw new AppError("NO_SUBSCRIPTION", "You don't have an active subscription to cancel");
+    }
+
+    await setSubscriptionCancelAtPeriodEnd(company.stripe_subscription_id, true);
+    await serviceClient
+      .from("companies")
+      .update({ cancel_at_period_end: true })
+      .eq("id", staff.company_id);
+
+    await logAuditEvent(staff.company_id, staff.id, "SUBSCRIPTION_CANCEL_SCHEDULED");
+
+    return ok(null);
+  } catch (e) {
+    return err(e);
+  }
+}
+
+// Undoes a pending cancel-at-period-end, so an admin can change their
+// mind before the billing period actually ends.
+export async function resumeSubscription(): Promise<ActionResult<null>> {
+  try {
+    const staff = await requireAdmin();
+    const serviceClient = createServiceClient();
+
+    const { data: company } = await serviceClient
+      .from("companies")
+      .select("stripe_subscription_id")
+      .eq("id", staff.company_id)
+      .maybeSingle();
+    if (!company?.stripe_subscription_id) {
+      throw new AppError("NO_SUBSCRIPTION", "You don't have an active subscription");
+    }
+
+    await setSubscriptionCancelAtPeriodEnd(company.stripe_subscription_id, false);
+    await serviceClient
+      .from("companies")
+      .update({ cancel_at_period_end: false })
+      .eq("id", staff.company_id);
+
+    await logAuditEvent(staff.company_id, staff.id, "SUBSCRIPTION_CANCEL_UNDONE");
+
+    return ok(null);
   } catch (e) {
     return err(e);
   }

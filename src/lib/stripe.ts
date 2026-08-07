@@ -99,6 +99,19 @@ export async function updateSubscriptionQuantity(
   await stripeRequest("POST", `/subscription_items/${itemId}`, { quantity });
 }
 
+// Schedules cancellation for the end of the current billing period
+// (rather than an immediate DELETE) so the company keeps access
+// through what they've already paid for -- standard self-serve SaaS
+// behavior. cancel_at_period_end: false undoes a pending cancellation.
+export async function setSubscriptionCancelAtPeriodEnd(
+  subscriptionId: string,
+  cancelAtPeriodEnd: boolean
+): Promise<void> {
+  await stripeRequest("POST", `/subscriptions/${subscriptionId}`, {
+    cancel_at_period_end: cancelAtPeriodEnd,
+  });
+}
+
 // HMAC verification per Stripe's documented scheme -- avoids pulling in
 // the Stripe SDK just for this one function (no Node/npm available
 // locally to safely regenerate the lockfile for a new dependency).

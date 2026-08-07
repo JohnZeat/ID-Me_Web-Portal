@@ -2,18 +2,20 @@
 
 import { useState, type ReactNode } from "react";
 
-const TABS = ["Staff", "Customers", "Settings", "API", "Audit"] as const;
+const TABS = ["Staff", "Customers", "Subscription", "Settings", "API", "Audit"] as const;
 type Tab = (typeof TABS)[number];
 
 export function AdminTabs({
   staff,
   customers,
+  subscription,
   settings,
   api,
   audit,
 }: {
   staff: ReactNode;
   customers: ReactNode;
+  subscription: ReactNode;
   settings: ReactNode;
   api: ReactNode;
   audit: ReactNode;
@@ -23,6 +25,7 @@ export function AdminTabs({
   const content: Record<Tab, ReactNode> = {
     Staff: staff,
     Customers: customers,
+    Subscription: subscription,
     Settings: settings,
     API: api,
     Audit: audit,

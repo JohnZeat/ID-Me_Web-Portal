@@ -11,12 +11,13 @@ import { CustomersTable } from "./customers-table";
 import { AuditLogTable } from "./audit-log-table";
 import { AdminTabs } from "./admin-tabs";
 import { SubscribeToProPanel } from "./subscribe-to-pro-panel";
-import { BillingPortalButton } from "./billing-portal-button";
+import { SubscriptionPanel } from "./subscription-panel";
 import {
   listStaff,
   getCompanySettings,
   listCompanyDomains,
   listApiKeys,
+  getSubscriptionSummary,
 } from "./actions";
 import { getErrorGuidanceForStaff } from "@/lib/error-guidance";
 import { isSuspended, isTrialExpired } from "@/lib/subscription";
@@ -61,19 +62,15 @@ export default async function AdminPage() {
 
   let suspended = false;
   let expired = false;
-  let isTrialing = false;
-  let hasStripeCustomer = false;
   if (staff) {
     const { data: company } = await supabase
       .from("companies")
-      .select("subscription_status, trial_ends_at, suspended_at, stripe_customer_id")
+      .select("subscription_status, trial_ends_at, suspended_at")
       .eq("id", staff.company_id)
       .maybeSingle();
     if (company) {
       suspended = isSuspended(company);
       expired = isTrialExpired(company);
-      isTrialing = company.subscription_status === "trialing";
-      hasStripeCustomer = !!company.stripe_customer_id;
     }
   }
   const locked = suspended || expired;
@@ -106,6 +103,12 @@ export default async function AdminPage() {
   const apiKeysGuidance =
     apiKeysResult && !apiKeysResult.ok
       ? await getErrorGuidanceForStaff(apiKeysResult.code)
+      : null;
+
+  const subscriptionResult = isAdmin ? await getSubscriptionSummary() : null;
+  const subscriptionGuidance =
+    subscriptionResult && !subscriptionResult.ok
+      ? await getErrorGuidanceForStaff(subscriptionResult.code)
       : null;
 
   return (
@@ -199,9 +202,19 @@ export default async function AdminPage() {
                       )
                     )}
                   </div>
-                  {isTrialing && <SubscribeToProPanel />}
-                  {hasStripeCustomer && <BillingPortalButton />}
                 </>
+              }
+              subscription={
+                subscriptionResult && !subscriptionResult.ok ? (
+                  <ErrorBox
+                    guidanceHtml={subscriptionGuidance?.html ?? null}
+                    fallback={subscriptionResult.message}
+                  />
+                ) : (
+                  subscriptionResult?.ok && (
+                    <SubscriptionPanel summary={subscriptionResult.data} />
+                  )
+                )
               }
               api={
                 apiKeysResult && !apiKeysResult.ok ? (

@@ -72,7 +72,10 @@ export async function POST(request: Request) {
     const subscription = event.data.object;
     await supabase
       .from("companies")
-      .update({ subscription_status: mapStripeStatus(subscription.status) })
+      .update({
+        subscription_status: mapStripeStatus(subscription.status),
+        cancel_at_period_end: !!subscription.cancel_at_period_end,
+      })
       .eq("stripe_subscription_id", subscription.id);
   }
 
