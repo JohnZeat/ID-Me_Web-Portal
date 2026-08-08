@@ -274,19 +274,15 @@ export function CodeGeneratorPanel({ dateFormat }: { dateFormat: DateFormat }) {
                 {generated.code}
               </p>
               <p className="mt-2 text-sm text-gray-600">
-                {secondsLeft > 0
-                  ? `Expires in ${secondsLeft}s`
-                  : "Expired — generate a new code"}
+                {secondsLeft > 0 ? `Expires in ${secondsLeft}s` : "Expired"}
               </p>
-              {secondsLeft === 0 && (
-                <button
-                  onClick={handleGenerate}
-                  disabled={generating}
-                  className="mt-3 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
-                >
-                  {generating ? "Generating..." : "Generate new code"}
-                </button>
-              )}
+              <button
+                onClick={handleGenerate}
+                disabled={generating}
+                className="mt-3 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
+              >
+                {generating ? "Resending..." : "Resend Code"}
+              </button>
             </div>
           )}
         </div>
