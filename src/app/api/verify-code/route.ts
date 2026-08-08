@@ -67,7 +67,9 @@ export async function POST(request: Request) {
 
   const { data: codeRow, error } = await supabase
     .from("codes")
-    .select("id, customer:customers(full_name, mobile_number)")
+    .select(
+      "id, company_id, created_by, customer:customers(full_name, mobile_number)"
+    )
     .eq("code", codeInput)
     .is("used_at", null)
     .gt("expires_at", new Date().toISOString())
@@ -110,8 +112,18 @@ export async function POST(request: Request) {
     .update({ used_at: new Date().toISOString() })
     .eq("id", codeRow.id);
 
+  const [{ data: staff }, { data: company }] = await Promise.all([
+    supabase.from("staff").select("full_name").eq("id", codeRow.created_by).maybeSingle(),
+    supabase.from("companies").select("name").eq("id", codeRow.company_id).maybeSingle(),
+  ]);
+
   return NextResponse.json(
-    { valid: true, customer: { fullName: customer.full_name } },
+    {
+      valid: true,
+      customer: { fullName: customer.full_name },
+      staff: { fullName: staff?.full_name ?? null },
+      company: { name: company?.name ?? null },
+    },
     { headers: CORS_HEADERS }
   );
 }
