@@ -7,6 +7,18 @@ type VerifyRequestBody = {
   mobileNumber?: unknown;
 };
 
+// Public, unauthenticated endpoint meant to be called from the customer
+// mobile app (and its web preview) from any origin.
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+}
+
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds} second${seconds === 1 ? "" : "s"}`;
   const minutes = Math.round(seconds / 60);
@@ -30,7 +42,7 @@ async function failure(code: string, status: number, expirySeconds?: number) {
 
   return NextResponse.json(
     { valid: false, code, guidance: guidance ? { ...guidance, html } : null },
-    { status }
+    { status, headers: CORS_HEADERS }
   );
 }
 
@@ -98,8 +110,8 @@ export async function POST(request: Request) {
     .update({ used_at: new Date().toISOString() })
     .eq("id", codeRow.id);
 
-  return NextResponse.json({
-    valid: true,
-    customer: { fullName: customer.full_name },
-  });
+  return NextResponse.json(
+    { valid: true, customer: { fullName: customer.full_name } },
+    { headers: CORS_HEADERS }
+  );
 }
